@@ -1,0 +1,21 @@
+.gradle
+local.properties
+.idea/
+build/
+captures/
+.externalNativeBuild
+.cxx
+*.apk
+*.ap_
+*.aab
+
+# Generated files
+app/build/
+app/schemas/
+
+# Keystore
+*.jks
+*.keystore
+
+# Android Studio
+*.hprof

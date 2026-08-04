@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Car Manager</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Accueil</string>
+    <string name="nav_vehicles">Véhicules</string>
+    <string name="nav_settings">Paramètres</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Tableau de bord</string>
+    <string name="dashboard_vehicle_count">Véhicules enregistrés</string>
+    <string name="dashboard_monthly_expenses">Dépenses du mois</string>
+    <string name="dashboard_next_maintenance">Prochain entretien</string>
+    <string name="dashboard_no_data">Aucune donnée pour le moment</string>
+    <string name="dashboard_add_vehicle_hint">Ajoutez un véhicule pour commencer</string>
+
+    <!-- Véhicules -->
+    <string name="vehicles_title">Mes véhicules</string>
+    <string name="vehicles_empty">Aucun véhicule enregistré</string>
+    <string name="vehicle_add">Ajouter un véhicule</string>
+    <string name="vehicle_edit">Modifier le véhicule</string>
+    <string name="vehicle_delete_confirm">Supprimer ce véhicule ?</string>
+    <string name="vehicle_delete_msg">Toutes les données associées (carburant, entretien) seront perdues.</string>
+    <string name="vehicle_brand">Marque</string>
+    <string name="vehicle_model">Modèle</string>
+    <string name="vehicle_year">Année</string>
+    <string name="vehicle_mileage">Kilométrage actuel (km)</string>
+    <string name="vehicle_fuel_type">Type de carburant</string>
+    <string name="vehicle_license_plate">Plaque d\'immatriculation</string>
+    <string name="vehicle_power">Puissance (ch)</string>
+    <string name="vehicle_tank_capacity">Capacité du réservoir (L)</string>
+    <string name="save">Enregistrer</string>
+    <string name="cancel">Annuler</string>
+    <string name="delete">Supprimer</string>
+    <string name="required_field">Ce champ est obligatoire</string>
+
+    <!-- Carburant -->
+    <string name="fuel_title">Historique carburant</string>
+    <string name="fuel_add">Ajouter un plein</string>
+    <string name="fuel_empty">Aucun plein enregistré</string>
+    <string name="fuel_liters">Litres</string>
+    <string name="fuel_price_per_liter">Prix au litre</string>
+    <string name="fuel_total_price">Prix total</string>
+    <string name="fuel_date">Date du plein</string>
+    <string name="fuel_note">Note (optionnel)</string>
+    <string name="fuel_stats_consumption">Consommation moyenne</string>
+    <string name="fuel_stats_total">Total dépensé</string>
+    <string name="fuel_gasoline">Essence</string>
+    <string name="fuel_diesel">Diesel</string>
+    <string name="fuel_electric">Électrique</string>
+    <string name="fuel_hybrid">Hybride</string>
+    <string name="fuel_lpg">GPL</string>
+    <string name="fuel_other">Autre</string>
+
+    <!-- Entretien -->
+    <string name="maintenance_title">Historique entretien</string>
+    <string name="maintenance_add">Ajouter un entretien</string>
+    <string name="maintenance_add_ct">Ajouter un contrôle technique</string>
+    <string name="maintenance_add_insurance">Ajouter une assurance</string>
+    <string name="maintenance_empty">Aucun entretien enregistré</string>
+    <string name="maintenance_type">Type d\'intervention</string>
+    <string name="maintenance_cost">Coût</string>
+    <string name="maintenance_next_due_date">Prochaine échéance (date)</string>
+    <string name="maintenance_next_due_mileage">Prochaine échéance (distance)</string>
+    <string name="maintenance_oil_change">Vidange</string>
+    <string name="maintenance_tires">Pneus</string>
+    <string name="maintenance_brakes">Freins</string>
+    <string name="maintenance_belt">Courroie</string>
+    <string name="maintenance_battery">Batterie</string>
+    <string name="maintenance_inspection">Révision</string>
+    <string name="maintenance_repair">Réparation</string>
+    <string name="maintenance_technical_inspection">Contrôle Technique</string>
+    <string name="maintenance_insurance">Assurance</string>
+    <string name="maintenance_other">Autre</string>
+
+    <!-- Paramètres -->
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_coming_soon">Options disponibles prochainement</string>
+
+    <!-- Commun -->
+    <string name="loading">Chargement…</string>
+    <string name="error_generic">Une erreur est survenue</string>
+
+    <!-- Scan IA -->
+    <string name="ocr_scan_fuel">Scanner un ticket de station (IA)</string>
+    <string name="ocr_scan_maintenance">Scanner une facture (IA)</string>
+    <string name="ocr_analyzing">Analyse en cours…</string>
+    <string name="ocr_finished">Analyse terminée</string>
+
+    <!-- Documents -->
+    <string name="docs_title">Documents du véhicule</string>
+    <string name="docs_empty">Aucun document enregistré. Cliquez sur le bouton + pour en ajouter un.</string>
+    <string name="docs_category_admin">Administratif</string>
+    <string name="docs_category_insurance">Assurance</string>
+    <string name="docs_category_ct">Contrôle Tech.</string>
+    <string name="docs_category_maintenance">Entretien</string>
+    <string name="docs_category_fuel">Carburant</string>
+    <string name="docs_category_photos">Photos</string>
+    <string name="docs_category_other">Autres</string>
+    <string name="docs_add_title">Détails du document</string>
+    <string name="docs_label_title">Titre du document</string>
+    <string name="docs_label_category">Catégorie :</string>
+    <string name="docs_convert_pdf">Convertir en PDF</string>
+    <string name="docs_delete">Supprimer le document</string>
+
+    <!-- UI Helpers -->
+    <string name="estimate_mileage">Estimer selon dernier relevé</string>
+    <string name="consumption_evolution">Évolution de la consommation</string>
+    <string name="not_provided">non renseigné</string>
+</resources>

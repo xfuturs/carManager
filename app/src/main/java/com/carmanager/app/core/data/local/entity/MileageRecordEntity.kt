@@ -1,0 +1,27 @@
+package com.carmanager.app.core.data.local.entity
+
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(
+    tableName = "mileage_records",
+    foreignKeys = [
+        ForeignKey(
+            entity = VehicleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["vehicleId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("vehicleId"), Index("date")]
+)
+data class MileageRecordEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val vehicleId: Long,
+    val date: Long,
+    val mileage: Int,
+    val source: String
+)

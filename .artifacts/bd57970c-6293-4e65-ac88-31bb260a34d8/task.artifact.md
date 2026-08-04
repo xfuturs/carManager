@@ -1,0 +1,7 @@
+- `[/]` Mise en place du Premium & Synchronisation Cloud
+    - `[x]` Infrastructure Billing & Firebase (Phase 1)
+    - `[ ]` Implémenter `AuthRepository` (Connexion Firebase)
+    - `[ ]` Implémenter `SyncRepository` (Sync Room <-> Firestore)
+    - `[ ]` Créer l'écran de Connexion/Compte Premium
+    - `[ ]` Activer le Garage Partagé (Permissions Firestore)
+- `[ ]` Génération du Rapport PDF de Revente (Premium)
