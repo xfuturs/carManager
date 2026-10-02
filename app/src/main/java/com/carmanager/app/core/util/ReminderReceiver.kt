@@ -1,16 +1,34 @@
 package com.carmanager.app.core.util
 
+import android.Manifest
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.carmanager.app.MainActivity
 import com.carmanager.app.R
+import com.carmanager.app.core.domain.session.WorkspaceSession
+import com.carmanager.app.core.domain.session.WorkspaceOwner
+import com.carmanager.app.core.domain.session.DeletionRegistry
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class ReminderReceiver : BroadcastReceiver() {
+    @Inject lateinit var session: WorkspaceSession
+    @Inject lateinit var deletionRegistry: DeletionRegistry
     override fun onReceive(context: Context, intent: Intent) {
+        // Les anciennes alarmes sans propriétaire correspondent aux données migrées invitées.
+        val owner = intent.getStringExtra("ownerKey") ?: WorkspaceOwner.GUEST
+        if (session.owner.value != owner || owner in deletionRegistry.blockedOwners.value) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
         val title = intent.getStringExtra("title") ?: "Rappel Car Manager"
         val message = intent.getStringExtra("message") ?: "Une échéance arrive à terme."
 
@@ -32,6 +50,6 @@ class ReminderReceiver : BroadcastReceiver() {
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        manager.notify(intent.data?.toString() ?: "legacy_guest", intent.getLongExtra("recordId", 0).hashCode(), notification)
     }
 }

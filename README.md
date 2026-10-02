@@ -17,7 +17,7 @@ Application Android professionnelle de gestion de flotte personnelle. Suivez vos
 - **Langage :** Kotlin 2.4+ (Coroutines, Flow)
 - **UI :** Jetpack Compose (Material 3)
 - **Architecture :** Clean Architecture + Feature-based (modulaire et évolutif)
-- **Données :** Room (v7) avec pré-remplissage du catalogue des marques
+- **Données :** Room (v8) avec pré-remplissage du catalogue des marques
 - **IA :** Google ML Kit OCR (traitement 100% local)
 - **Graphiques :** Vico Charts
 - **Injection de dépendances :** Dagger Hilt
@@ -47,8 +47,10 @@ app/src/main/java/com/carmanager/app/
 
 ## 🔒 Confidentialité & Sauvegarde
 
-- **100% Local :** Vos données et photos ne quittent jamais votre téléphone.
-- **Sauvegarde :** Pour sauvegarder, synchronisez le dossier du projet avec votre service Cloud préféré (Google Drive, OneDrive) ou utilisez Git.
+- **Garage local :** Room et les fichiers de cette installation sont la source des véhicules, historiques et documents, en mode invité comme avec un compte Google. Les espaces invité et comptes restent séparés.
+- **Connexion :** Google est le seul parcours de connexion proposé ; Firebase conserve l'identité. Une ancienne session déjà ouverte reste accessible jusqu'à sa déconnexion explicite, sans transfert de son garage.
+- **Sauvegarde :** La sauvegarde cloud du garage est inactive. Aucune sauvegarde Drive, restauration cloud ou fusion invité/compte n'est disponible. La perte du téléphone ou la désinstallation peut entraîner la perte des données locales. Git sauvegarde le code source, pas le garage de l'utilisateur.
+- **Services réseau :** Google/Firebase Auth, Google Play Billing et Ads/UMP restent utilisés. Firestore sert uniquement au nettoyage des anciennes collections lors d'une suppression de compte explicitement demandée ; aucun envoi automatique du garage n'est actif.
 
 ---
 *Développé avec passion pour simplifier la vie des conducteurs.*

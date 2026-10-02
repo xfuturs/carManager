@@ -1,3 +1,6 @@
+import com.carmanager.build.AdMobConfiguration
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,14 +10,41 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+// Source de production explicite, locale et non versionnee ; aucune lecture de secrets globaux.
+val adMobProperties = Properties().apply {
+    val configFile = rootProject.file("admob.properties")
+    if (configFile.isFile) configFile.inputStream().use { load(it) }
+}
+val productionAdMobAppId = adMobProperties.getProperty("ADMOB_APP_ID")
+val productionBannerId = adMobProperties.getProperty("ADMOB_BANNER_AD_UNIT_ID")
+val productionAdMobErrors = AdMobConfiguration.releaseErrors(productionAdMobAppId, productionBannerId)
+
+val validateReleaseAdsConfiguration = tasks.register("validateReleaseAdsConfiguration") {
+    group = "verification"
+    description = "Refuse un release sans configuration AdMob de production explicite et valide."
+    doLast {
+        if (productionAdMobErrors.isNotEmpty()) throw GradleException(
+            "MANUAL REQUIRED STEP - AdMob production configuration: " + productionAdMobErrors.joinToString("; ") +
+                ". Renseigner admob.properties a la racine du projet. Aucune valeur n'est affichee."
+        )
+    }
+}
+// La garde precede chaque entree de variante release, y compris manifests et BuildConfig.
+tasks.configureEach {
+    if (name.contains("Release") && name != "validateReleaseAdsConfiguration") {
+        dependsOn(validateReleaseAdsConfiguration)
+    }
+}
+
 android {
     namespace = "com.carmanager.app"
-    compileSdk = 35
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.carmanager.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
 
@@ -27,7 +57,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["ADMOB_APP_ID"] = AdMobConfiguration.DEBUG_APP_ID
+            buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"${AdMobConfiguration.DEBUG_BANNER_ID}\"")
+        }
         release {
+            // Sans valeurs valides, aucune valeur vide/factice/demo n'est injectee dans un manifeste.
+            if (productionAdMobErrors.isEmpty()) {
+                manifestPlaceholders["ADMOB_APP_ID"] = productionAdMobAppId!!
+                buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"${productionBannerId!!}\"")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -61,6 +100,9 @@ android {
             it.useJUnitPlatform()
         }
     }
+
+    // Les tests exercent exactement le validateur utilise par Gradle ; source de build uniquement.
+    sourceSets.getByName("test").java.srcDir(rootProject.file("buildSrc/src/main/java"))
 }
 
 dependencies {

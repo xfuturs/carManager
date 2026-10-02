@@ -6,6 +6,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+/** Rôles explicites. Le chrome utilise ces styles sans réduire les textes métier. */
+object CarManagerTypography {
+    val pageTitle = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp)
+    val toolbarTitle = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 24.sp)
+    val sectionHeading = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 20.sp, lineHeight = 28.sp)
+    val cardTitle = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 26.sp)
+    val body = TextStyle(fontFamily = FontFamily.Default, fontSize = 18.sp, lineHeight = 26.sp)
+    val supporting = TextStyle(fontFamily = FontFamily.Default, fontSize = 16.sp, lineHeight = 22.sp)
+    val buttonLabel = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 22.sp)
+    val navigationLabel = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp)
+}
+
 /**
  * Configuration typographique de l'application.
  * Les tailles ont été augmentées pour une visibilité optimale (Phase 12).

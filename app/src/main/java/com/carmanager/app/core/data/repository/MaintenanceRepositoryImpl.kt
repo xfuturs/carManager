@@ -10,27 +10,32 @@ import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
+import com.carmanager.app.core.domain.session.WorkspaceSession
+import com.carmanager.app.core.data.local.OwnedDatabaseAccess
 import javax.inject.Inject
 
 class MaintenanceRepositoryImpl @Inject constructor(
-    private val maintenanceDao: MaintenanceDao
+    private val maintenanceDao: MaintenanceDao,
+    private val session: WorkspaceSession,
+    private val access: OwnedDatabaseAccess,
+    private val writer: com.carmanager.app.core.data.local.LocalGarageWriter
 ) : MaintenanceRepository {
 
     override fun observeByVehicle(vehicleId: Long): Flow<List<MaintenanceRecord>> {
-        return maintenanceDao.observeByVehicle(vehicleId).map { entities ->
-            entities.map { it.toDomain() }
-        }
+        return session.observe { owner -> maintenanceDao.observeByVehicle(vehicleId, owner).map { entities ->
+            entities.map { it.toDomain(owner) }
+        } }
     }
 
     override fun observeAll(): Flow<List<MaintenanceRecord>> {
-        return maintenanceDao.observeAll().map { entities ->
-            entities.map { it.toDomain() }
-        }
+        return session.observe { owner -> maintenanceDao.observeAll(owner).map { entities ->
+            entities.map { it.toDomain(owner) }
+        } }
     }
 
     override fun observeNextUpcoming(): Flow<MaintenanceRecord?> {
         val now = System.currentTimeMillis()
-        return maintenanceDao.observeNextUpcoming(now).map { it?.toDomain() }
+        return session.observe<MaintenanceRecord?> { owner -> maintenanceDao.observeNextUpcoming(now, owner).map { it?.toDomain(owner) } }
     }
 
     override fun observeMonthlyTotal(timestamp: Long): Flow<Double> {
@@ -38,14 +43,23 @@ class MaintenanceRepositoryImpl @Inject constructor(
         val startOfMonth = date.with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfMonth = date.with(TemporalAdjusters.lastDayOfMonth()).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         
-        return maintenanceDao.observeMonthlyTotal(startOfMonth, endOfMonth)
+        return session.observe { owner -> maintenanceDao.observeMonthlyTotal(startOfMonth, endOfMonth, owner) }
     }
 
     override suspend fun saveMaintenanceRecord(record: MaintenanceRecord): Long {
-        return maintenanceDao.insert(record.toEntity())
+        if (record.id == 0L) return writer.saveMaintenance(record)
+        com.carmanager.app.core.domain.validation.GarageValidation.maintenance(record)
+
+        return access.write(record.ownerKey, record.vehicleId) {
+            if (record.id != 0L) check(maintenanceDao.getById(record.id, record.ownerKey) != null) { "Enregistrement absent de cet espace." }
+            maintenanceDao.insert(record.toEntity())
+        }
     }
 
     override suspend fun deleteMaintenanceRecord(record: MaintenanceRecord) {
-        maintenanceDao.delete(record.toEntity())
+        access.write(record.ownerKey, record.vehicleId) {
+            check(maintenanceDao.getById(record.id, record.ownerKey) != null) { "Enregistrement absent de cet espace." }
+            maintenanceDao.delete(record.toEntity())
+        }
     }
 }

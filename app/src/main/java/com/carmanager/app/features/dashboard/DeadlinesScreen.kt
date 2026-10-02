@@ -1,5 +1,6 @@
 package com.carmanager.app.features.dashboard
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.core.domain.model.MaintenanceRecord
 import com.carmanager.app.core.domain.model.Vehicle
+import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.theme.LocalAppUnits
 import com.carmanager.app.core.util.DateFormatter
 import java.util.concurrent.TimeUnit
@@ -28,33 +30,30 @@ fun DeadlinesScreen(
     onNavigateBack: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val stats by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Échéances à venir", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        @Suppress("DEPRECATION")
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
-                    }
-                }
+            CarManagerBackAppBar(
+                title = "Échéances à venir",
+                onNavigateBack = onNavigateBack
             )
         }
     ) { padding ->
-        if (stats.upcomingDeadlines.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Aucun rendez-vous prévu", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(stats.upcomingDeadlines) { (vehicle, record) ->
-                    DeadlineItem(vehicle, record)
+        LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { stats ->
+            if (stats.upcomingDeadlines.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Aucun rendez-vous prévu", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(stats.upcomingDeadlines) { (vehicle, record) ->
+                        DeadlineItem(vehicle, record)
+                    }
                 }
             }
         }

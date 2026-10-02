@@ -1,5 +1,6 @@
 package com.carmanager.app.features.maintenance
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -41,13 +42,10 @@ fun MaintenanceListScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.maintenance_title), fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.cancel))
-                    }
-                }
+            CarManagerBackAppBar(
+                title = stringResource(R.string.maintenance_title),
+                onNavigateBack = onNavigateBack,
+                backDescription = stringResource(R.string.cancel)
             )
         },
         floatingActionButton = {

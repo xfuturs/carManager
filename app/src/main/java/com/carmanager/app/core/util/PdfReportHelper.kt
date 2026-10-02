@@ -2,13 +2,14 @@ package com.carmanager.app.core.util
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.util.Log
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.carmanager.app.core.domain.model.FuelRecord
 import com.carmanager.app.core.domain.model.MaintenanceRecord
@@ -103,10 +104,12 @@ object PdfReportHelper {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, contentUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(Intent.createChooser(shareIntent, "Partager le carnet d'entretien"))
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("PdfReportHelper", "Erreur lors de la génération ou du partage du PDF", e)
+            Toast.makeText(context, "Erreur lors de la génération du PDF", Toast.LENGTH_SHORT).show()
         }
     }
 }

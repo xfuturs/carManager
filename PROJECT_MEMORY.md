@@ -17,8 +17,8 @@ L'application suit une architecture **Clean Architecture** avec une organisation
     - `vehicles/` : Gestion du garage (Ajout avec catalogue marques/modèles, Modif, Suppression).
     - `fuel/` : Suivi Carburant et Recharges Électriques.
     - `maintenance/` : Historique d'entretien et **Coach d'Entretien Intelligent**.
-    - `documents/` : Porte-documents sécurisé avec 7 catégories métiers.
-    - **`auth/`** : Gestion des comptes (Connexion Google, Inscription, RGPD).
+    - `documents/` : Porte-documents sécurisé avec 8 catégories métiers (Administratif, Assurance, CT, Entretien, Carburant, Photos, Sinistres, Divers) et **recherche globale**.
+    - **`auth/`** : Gestion des comptes (Connexion Google, Inscription, RGPD) et **Support Client (xfuturs.app@gmail.com)**.
 
 ---
 
@@ -37,6 +37,11 @@ L'application suit une architecture **Clean Architecture** avec une organisation
 
 ### 💡 Coach d'Entretien Intelligent
 - **Personnalisation :** Conseils dynamiques adaptés au type de véhicule et au kilométrage.
+
+### 🇪🇺 Adaptabilité Européenne & Énergie
+- **Multi-Devises :** Support de toutes les devises d'Europe (Euro, Livre, Franc Suisse, Złoty, Koruna, Forint, Leu, Krona, Lev, Hryvnia, Lira, Ruble, Dinar, Mark, Lek, Denar).
+- **Mode Électrique :** L'interface bascule intelligemment en "kWh" et "Recharge".
+- **Unités :** Gestion flexible des kilomètres (km) et des miles (mi).
 
 ---
 

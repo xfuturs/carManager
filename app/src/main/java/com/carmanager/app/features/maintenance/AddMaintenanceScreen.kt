@@ -1,6 +1,10 @@
 package com.carmanager.app.features.maintenance
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -17,12 +21,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.content.ContextCompat
 import com.carmanager.app.R
 import com.carmanager.app.core.domain.model.MaintenanceType
 import com.carmanager.app.core.ui.components.DatePickerField
@@ -40,6 +46,29 @@ fun AddMaintenanceScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val units = LocalAppUnits.current
+    val context = LocalContext.current
+
+    fun notificationPermissionStatus(): NotificationPermissionStatus = NotificationPermissionStatus.from(
+        sdkInt = Build.VERSION.SDK_INT,
+        granted = Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    )
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted -> viewModel.onNotificationPermissionResult(granted) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.notificationPermissionRequests.collect {
+            // La permission a pu changer depuis le clic ; ne pas afficher un dialogue devenu inutile.
+            if (Build.VERSION.SDK_INT >= 33 && notificationPermissionStatus() == NotificationPermissionStatus.MISSING) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                viewModel.onNotificationPermissionResult(granted = true)
+            }
+        }
+    }
 
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -83,16 +112,12 @@ fun AddMaintenanceScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            @Suppress("DEPRECATION")
-            CenterAlignedTopAppBar(
-                title = { Text(screenTitle, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.cancel))
-                    }
-                },
+            CarManagerBackAppBar(
+                title = screenTitle,
+                onNavigateBack = onNavigateBack,
+                backDescription = stringResource(R.string.cancel),
                 actions = {
-                    IconButton(onClick = { viewModel.save() }) {
+                    IconButton(onClick = { viewModel.save(notificationPermissionStatus()) }, enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning) {
                         Icon(Icons.Default.Check, contentDescription = stringResource(R.string.save))
                     }
                 }
@@ -121,6 +146,12 @@ fun AddMaintenanceScreen(
                     Text(stringResource(R.string.ocr_scan_maintenance))
                 }
             }
+
+            DatePickerField(
+                label = "Date de réalisation",
+                selectedDate = viewModel.date,
+                onDateSelected = viewModel::onDateChange
+            )
 
             MaintenanceTypeDropdown(
                 selectedType = viewModel.type,
@@ -154,7 +185,7 @@ fun AddMaintenanceScreen(
                 onValueChange = viewModel::onCostChange,
                 label = { Text(stringResource(R.string.maintenance_cost) + " (${units.currency})") },
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
 
@@ -192,7 +223,8 @@ fun AddMaintenanceScreen(
             )
 
             Button(
-                onClick = { viewModel.save() },
+                onClick = { viewModel.save(notificationPermissionStatus()) },
+                enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 16.dp)

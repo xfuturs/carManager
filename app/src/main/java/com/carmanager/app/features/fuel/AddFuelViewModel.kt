@@ -22,14 +22,21 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.carmanager.app.core.domain.validation.NumericInput
+import com.carmanager.app.core.domain.validation.GarageValidation
+import com.carmanager.app.core.domain.validation.FormValidationException
+import kotlinx.coroutines.CancellationException
+import android.util.Log
 
 @HiltViewModel
 class AddFuelViewModel @Inject constructor(
     private val saveFuelRecordUseCase: SaveFuelRecordUseCase,
     private val vehicleRepository: VehicleRepository,
     @ApplicationContext private val context: Context,
+    private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    private val workspaceOwner = session.owner.value
 
     private val vehicleId: Long = checkNotNull(savedStateHandle["vehicleId"])
 
@@ -63,8 +70,15 @@ class AddFuelViewModel @Inject constructor(
     var isScanning by mutableStateOf(false)
         private set
 
-    private val _uiEvent = Channel<UiEvent>()
+    var isSaving by mutableStateOf(false)
+        private set
+    var hasSaved by mutableStateOf(false)
+        private set
+    private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
+
+    var isVehicleLoaded by mutableStateOf(false)
+        private set
 
     init {
         viewModelScope.launch {
@@ -73,6 +87,7 @@ class AddFuelViewModel @Inject constructor(
                 batteryCapacity = vehicle.batteryCapacity
                 fuelType = vehicle.fuelType
                 currentVehicleMileage = vehicle.currentMileage
+                isVehicleLoaded = true
                 mileage = ""
                 
                 isElectricEntry = (vehicle.fuelType == FuelType.ELECTRIC)
@@ -80,7 +95,7 @@ class AddFuelViewModel @Inject constructor(
         }
     }
 
-    fun onMileageChange(value: String) { if (value.all { it.isDigit() }) mileage = value }
+    fun onMileageChange(value: String) { mileage = value }
     fun onLitersChange(value: String) { liters = value }
     fun onTotalPriceChange(value: String) { totalPrice = value }
     fun onNoteChange(value: String) { note = value }
@@ -88,7 +103,7 @@ class AddFuelViewModel @Inject constructor(
     fun onElectricEntryToggle(value: Boolean) { isElectricEntry = value }
     
     fun onEstimatedMileageSelect(increment: Int) {
-        mileage = (currentVehicleMileage + increment).toString()
+        mileage = (currentVehicleMileage.toLong() + increment).toString()
     }
 
     fun onScanReceipt(uri: Uri) {
@@ -105,51 +120,35 @@ class AddFuelViewModel @Inject constructor(
     }
 
     fun save() {
-        if (liters.isBlank() || totalPrice.isBlank()) {
+        if (isSaving || hasSaved || isScanning) return
+        val record = try {
+            session.requireWritable(workspaceOwner)
+            if (!isVehicleLoaded) throw FormValidationException("Attendez le chargement du véhicule.")
+            FuelRecord(ownerKey = workspaceOwner, vehicleId = vehicleId, date = date,
+                mileage = if (mileage.isBlank()) currentVehicleMileage else NumericInput.integer(mileage, "Kilométrage"),
+                liters = NumericInput.decimal(liters, if (isElectricEntry) "kWh" else "Litres"),
+                totalPrice = NumericInput.decimal(totalPrice, "Prix total"),
+                note = note.takeIf { it.isNotBlank() }, isElectric = isElectricEntry
+            ).also { GarageValidation.fuel(it, if (isElectricEntry) batteryCapacity else tankCapacity) }
+        } catch (e: Exception) {
             showErrors = true
-            val errorMsg = if (isElectricEntry) "Veuillez remplir kWh et Prix" else "Veuillez remplir Litres et Prix"
-            viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar(errorMsg))
-            }
+            viewModelScope.launch { _uiEvent.send(UiEvent.ShowSnackbar(
+                if (e is FormValidationException) e.message!! else "Rouvrez ce formulaire dans l'espace actif."
+            )) }
             return
         }
-        
-        val enteredLiters = liters.toDoubleOrNull() ?: 0.0
-        val capacity = if (isElectricEntry) batteryCapacity else tankCapacity
-        
-        if (capacity != null && enteredLiters > (capacity * 1.05)) {
-            val unit = if (isElectricEntry) "kWh" else "L"
-            viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar("Le volume saisi ($enteredLiters $unit) dépasse la capacité du véhicule (${capacity} $unit)"))
-            }
-            return
-        }
-        
-        val enteredMileage = mileage.toIntOrNull() ?: currentVehicleMileage
-        
-        if (enteredMileage < currentVehicleMileage) {
-            viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar("Le kilométrage ne peut pas être inférieur au précédent ($currentVehicleMileage km)"))
-            }
-            return
-        }
-
+        isSaving = true
         viewModelScope.launch {
             try {
-                val record = FuelRecord(
-                    vehicleId = vehicleId,
-                    date = date,
-                    mileage = enteredMileage,
-                    liters = liters.toDoubleOrNull() ?: 0.0,
-                    totalPrice = totalPrice.toDoubleOrNull() ?: 0.0,
-                    note = note.takeIf { it.isNotBlank() },
-                    isElectric = isElectricEntry
-                )
                 saveFuelRecordUseCase(record)
+                hasSaved = true
                 _uiEvent.send(UiEvent.Success)
             } catch (e: Exception) {
-                _uiEvent.send(UiEvent.ShowSnackbar("Erreur lors de la sauvegarde: ${e.localizedMessage}"))
-            }
+                if (e is CancellationException) throw e
+                Log.e("AddFuel", "Échec sauvegarde locale", e)
+                _uiEvent.send(UiEvent.ShowSnackbar(if (e is FormValidationException) e.message!! else
+                    "Sauvegarde impossible. Rouvrez le formulaire ou réessayez."))
+            } finally { isSaving = false }
         }
     }
 }

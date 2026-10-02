@@ -27,7 +27,8 @@ fun VehicleEntity.toDomain(): Vehicle = Vehicle(
     tankCapacity = tankCapacity,
     batteryCapacity = batteryCapacity,
     createdAt = createdAt,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    ownerKey = ownerKey
 )
 
 fun Vehicle.toEntity(): VehicleEntity = VehicleEntity(
@@ -43,7 +44,8 @@ fun Vehicle.toEntity(): VehicleEntity = VehicleEntity(
     tankCapacity = tankCapacity,
     batteryCapacity = batteryCapacity,
     createdAt = createdAt,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    ownerKey = ownerKey
 )
 
 fun FuelTypeEntity.toDomain(): FuelType = FuelType.valueOf(name)
@@ -51,7 +53,7 @@ fun FuelType.toEntity(): FuelTypeEntity = FuelTypeEntity.valueOf(name)
 
 // --- Fuel Mappers ---
 
-fun FuelRecordEntity.toDomain(): FuelRecord = FuelRecord(
+fun FuelRecordEntity.toDomain(ownerKey: String): FuelRecord = FuelRecord(
     id = id,
     vehicleId = vehicleId,
     date = date,
@@ -59,7 +61,8 @@ fun FuelRecordEntity.toDomain(): FuelRecord = FuelRecord(
     liters = liters,
     totalPrice = totalPrice,
     note = note,
-    isElectric = isElectric
+    isElectric = isElectric,
+    ownerKey = ownerKey
 )
 
 fun FuelRecord.toEntity(): FuelRecordEntity = FuelRecordEntity(
@@ -75,7 +78,7 @@ fun FuelRecord.toEntity(): FuelRecordEntity = FuelRecordEntity(
 
 // --- Maintenance Mappers ---
 
-fun MaintenanceRecordEntity.toDomain(): MaintenanceRecord = MaintenanceRecord(
+fun MaintenanceRecordEntity.toDomain(ownerKey: String): MaintenanceRecord = MaintenanceRecord(
     id = id,
     vehicleId = vehicleId,
     type = type.toDomain(),
@@ -85,7 +88,8 @@ fun MaintenanceRecordEntity.toDomain(): MaintenanceRecord = MaintenanceRecord(
     cost = cost,
     note = note,
     nextDueDate = nextDueDate,
-    nextDueMileage = nextDueMileage
+    nextDueMileage = nextDueMileage,
+    ownerKey = ownerKey
 )
 
 fun MaintenanceRecord.toEntity(): MaintenanceRecordEntity = MaintenanceRecordEntity(

@@ -1,5 +1,6 @@
 package com.carmanager.app.features.maintenance
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -31,14 +32,9 @@ fun MaintenanceAdviceScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Coach Entretien", fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        @Suppress("DEPRECATION")
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
-                    }
-                }
+            CarManagerBackAppBar(
+                title = "Coach Entretien",
+                onNavigateBack = onNavigateBack
             )
         }
     ) { padding ->

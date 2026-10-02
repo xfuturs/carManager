@@ -11,5 +11,6 @@ data class MileageRecord(
     val vehicleId: Long,
     val date: Long,
     val mileage: Int,
-    val source: MileageSource
+    val source: MileageSource,
+    val ownerKey: String = "guest:local",
 )

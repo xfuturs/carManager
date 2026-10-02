@@ -1,5 +1,6 @@
 package com.carmanager.app.features.dashboard
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.core.domain.model.FuelType
 import com.carmanager.app.core.ui.components.StatCard
+import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.theme.LocalAppUnits
 import com.carmanager.app.core.ui.theme.OnFuelColor
 import com.carmanager.app.core.ui.theme.MaintenanceColor
@@ -39,70 +41,67 @@ fun StatsScreen(
     onNavigateBack: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val stats by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
     val units = LocalAppUnits.current
     val context = androidx.compose.ui.platform.LocalContext.current
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Statistiques Globales", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        @Suppress("DEPRECATION")
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
-                    }
-                }
+            CarManagerBackAppBar(
+                title = "Statistiques Globales",
+                onNavigateBack = onNavigateBack
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item {
-                Text(
-                    "Répartition des dépenses ce mois",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatCard(
-                        title = "Carburant",
-                        value = "%.2f".format(stats.monthlyFuelCost) + " " + units.currency,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = "Entretien",
-                        value = "%.2f".format(stats.monthlyMaintenanceCost) + " " + units.currency,
-                        modifier = Modifier.weight(1f)
+        LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { stats ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                item {
+                    Text(
+                        "Répartition des dépenses ce mois",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
                     )
                 }
-            }
 
-            item {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    "Performance par véhicule",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-            }
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        StatCard(
+                            title = "Carburant",
+                            value = "%.2f".format(stats.monthlyFuelCost) + " " + units.currency,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Entretien",
+                            value = "%.2f".format(stats.monthlyMaintenanceCost) + " " + units.currency,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
 
-            items(stats.vehicles) { vehicleStats ->
-                VehicleStatsSummary(
-                    stats = vehicleStats,
-                    isPremium = isPremium,
-                    onGenerateReport = { viewModel.generateReport(context, vehicleStats.vehicle.id) }
-                )
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text(
+                        "Performance par véhicule",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                items(stats.vehicles) { vehicleStats ->
+                    VehicleStatsSummary(
+                        stats = vehicleStats,
+                        isPremium = isPremium,
+                        onGenerateReport = { viewModel.generateReport(context, vehicleStats.vehicle.id) }
+                    )
+                }
             }
         }
     }

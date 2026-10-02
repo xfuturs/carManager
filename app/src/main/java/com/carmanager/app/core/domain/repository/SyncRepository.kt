@@ -2,23 +2,14 @@ package com.carmanager.app.core.domain.repository
 
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Interface gérant la synchronisation entre la base de données locale (Room) 
- * et le stockage Cloud (Firestore).
- */
+enum class GarageSyncStatus { DISABLED }
+
+/** Point d'extension pour une future sauvegarde optionnelle. Room reste la source locale. */
 interface SyncRepository {
-    /**
-     * Lance le processus de synchronisation.
-     */
-    suspend fun syncAll()
-
-    /**
-     * Active la synchronisation automatique en temps réel.
-     */
+    val status: StateFlow<GarageSyncStatus>
+    suspend fun syncAll(): Result<Unit>
     fun startAutoSync()
-
-    /**
-     * Flux indiquant si une synchronisation est en cours.
-     */
+    suspend fun stopSync()
+    val syncError: StateFlow<String?>
     val isSyncing: StateFlow<Boolean>
 }

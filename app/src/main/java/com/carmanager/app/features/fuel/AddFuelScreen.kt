@@ -1,5 +1,6 @@
 package com.carmanager.app.features.fuel
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,16 +66,12 @@ fun AddFuelScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            @Suppress("DEPRECATION")
-            CenterAlignedTopAppBar(
-                title = { Text(screenTitle, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.cancel))
-                    }
-                },
+            CarManagerBackAppBar(
+                title = screenTitle,
+                onNavigateBack = onNavigateBack,
+                backDescription = stringResource(R.string.cancel),
                 actions = {
-                    IconButton(onClick = { viewModel.save() }) {
+                    IconButton(onClick = { viewModel.save() }, enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning) {
                         Icon(Icons.Default.Check, contentDescription = stringResource(R.string.save))
                     }
                 }
@@ -138,7 +135,7 @@ fun AddFuelScreen(
                     onValueChange = viewModel::onLitersChange,
                     label = { Text(if (viewModel.isElectricEntry) "kWh *" else stringResource(R.string.fuel_liters) + " *") },
                     modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     isError = viewModel.showErrors && viewModel.liters.isBlank()
                 )
@@ -147,7 +144,7 @@ fun AddFuelScreen(
                     onValueChange = viewModel::onTotalPriceChange,
                     label = { Text(stringResource(R.string.fuel_total_price) + " (${units.currency}) *") },
                     modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     isError = viewModel.showErrors && viewModel.totalPrice.isBlank()
                 )
@@ -173,6 +170,7 @@ fun AddFuelScreen(
 
             Button(
                 onClick = { viewModel.save() },
+                enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 16.dp)

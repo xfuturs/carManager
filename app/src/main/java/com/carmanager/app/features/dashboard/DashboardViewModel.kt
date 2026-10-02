@@ -3,6 +3,7 @@ package com.carmanager.app.features.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.carmanager.app.core.domain.model.DashboardStats
+import com.carmanager.app.core.domain.model.LocalDataState
 import com.carmanager.app.core.domain.model.MileageSource
 import com.carmanager.app.core.domain.model.Vehicle
 import com.carmanager.app.core.domain.repository.PremiumRepository
@@ -13,6 +14,18 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.carmanager.app.core.util.UiEvent
+import com.carmanager.app.core.domain.validation.FormValidationException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import android.util.Log
 import javax.inject.Inject
 
 @HiltViewModel
@@ -24,12 +37,16 @@ class DashboardViewModel @Inject constructor(
     private val generateVehicleReportUseCase: GenerateVehicleReportUseCase
 ) : ViewModel() {
 
-    val uiState: StateFlow<DashboardStats> = getDashboardStatsUseCase()
+    private val retry = MutableStateFlow(0)
+    val uiState: StateFlow<LocalDataState<DashboardStats>> = flow {
+        emitAll(getDashboardStatsUseCase.observeState(retry))
+    }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = DashboardStats()
+            started = SharingStarted.WhileSubscribed(5000, replayExpirationMillis = 0),
+            initialValue = LocalDataState.Loading
         )
+    fun retryLoading() { retry.value++ }
 
     val currency: StateFlow<String> = settingsRepository.currency
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "€")
@@ -39,13 +56,23 @@ class DashboardViewModel @Inject constructor(
 
     val isPremium: StateFlow<Boolean> = premiumRepository.isPremium
 
+    var isUpdatingMileage by mutableStateOf(false)
+        private set
+    private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
+    val uiEvent = _uiEvent.receiveAsFlow()
+
     fun updateMileage(vehicle: Vehicle, newMileage: Int) {
+        if (isUpdatingMileage) return
+        isUpdatingMileage = true
         viewModelScope.launch {
             try {
                 updateMileageUseCase(vehicle, newMileage, MileageSource.MANUAL)
             } catch (e: Exception) {
-                // Handle error
-            }
+                if (e is CancellationException) throw e
+                Log.e("Dashboard", "Échec relevé kilométrique", e)
+                _uiEvent.send(UiEvent.ShowSnackbar(if (e is FormValidationException) e.message!! else
+                    "Relevé non enregistré. Rouvrez le formulaire ou réessayez."))
+            } finally { isUpdatingMileage = false }
         }
     }
 

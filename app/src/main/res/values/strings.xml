@@ -73,6 +73,8 @@
     <string name="maintenance_technical_inspection">Contrôle Technique</string>
     <string name="maintenance_insurance">Assurance</string>
     <string name="maintenance_other">Autre</string>
+    <string name="maintenance_saved_notifications_disabled">Intervention enregistrée. Les notifications sont désactivées, le rappel peut ne pas s\'afficher.</string>
+    <string name="maintenance_saved_reminder_failed_notifications_disabled">Intervention enregistrée. Le rappel n\'a pas pu être programmé et les notifications sont désactivées.</string>
 
     <!-- Paramètres -->
     <string name="settings_title">Paramètres</string>
@@ -97,6 +99,7 @@
     <string name="docs_category_maintenance">Entretien</string>
     <string name="docs_category_fuel">Carburant</string>
     <string name="docs_category_photos">Photos</string>
+    <string name="docs_category_claims">Sinistres</string>
     <string name="docs_category_other">Autres</string>
     <string name="docs_add_title">Détails du document</string>
     <string name="docs_label_title">Titre du document</string>
@@ -108,4 +111,79 @@
     <string name="estimate_mileage">Estimer selon dernier relevé</string>
     <string name="consumption_evolution">Évolution de la consommation</string>
     <string name="not_provided">non renseigné</string>
+
+    <!-- Support -->
+    <string name="report_problem">Signaler un problème</string>
+    <string name="support_email_subject">Problème sur l\'application Car Manager</string>
+
+    <!-- Auth & Premium -->
+    <string name="login_title">Connexion</string>
+    <string name="login_google">Continuer avec Google</string>
+    <string name="login_desc">Le garage reste sur cet appareil, dans un espace distinct par compte. Google sert à vous connecter ; la sauvegarde cloud du garage est inactive. Le mode invité reste disponible et séparé.</string>
+
+    <string name="premium_status_connected">Connecté en tant que :</string>
+    <string name="premium_logout">Se déconnecter</string>
+    <string name="premium_delete_account">Supprimer mon compte et mes données</string>
+    <string name="premium_account_section">Compte</string>
+    <string name="premium_title">Premium</string>
+    <string name="premium_benefits">Sans publicités et rapports de revente PDF. Achat unique via Google Play, disponible aussi en mode invité.</string>
+    <string name="premium_one_time_price">Achat unique · %1$s</string>
+    <string name="premium_purchase">Passer à Premium</string>
+    <string name="premium_refresh">Restaurer / actualiser Premium</string>
+    <string name="premium_active">Premium actif</string>
+    <string name="premium_pending">Achat en attente. Premium sera activé lorsque Google Play confirmera le paiement.</string>
+    <string name="premium_loading">Vérification auprès de Google Play…</string>
+    <string name="premium_purchase_loading">Achat en cours avec Google Play…</string>
+    <string name="premium_store_unavailable">Google Play est indisponible pour le moment. Vérifiez votre connexion puis actualisez Premium.</string>
+    <string name="premium_offer_unavailable">L\'offre Premium est indisponible pour le moment. Actualisez ou réessayez plus tard.</string>
+    <string name="premium_purchase_failed">L\'achat n\'a pas pu être lancé ou terminé. Vous pouvez réessayer.</string>
+    <string name="premium_ack_pending">Confirmation de l\'achat auprès de Google Play en cours…</string>
+    <string name="premium_ack_failed">Premium actif, mais la confirmation de l\'achat auprès de Google Play a échoué. Actualisez Premium pour réessayer.</string>
+
+    <string name="settings_appearance">Apparence</string>
+    <string name="settings_currency">Devise Monétaire</string>
+    <string name="settings_units">Unités de Distance</string>
+    <string name="settings_privacy_ads">Confidentialité publicitaire</string>
+    <string name="settings_privacy_policy">Politique de Confidentialité</string>
+    <string name="settings_info_section">Informations</string>
+    <string name="settings_version">Version</string>
+    <!-- V0.A6 : outils autonomes, sans stockage des saisies. -->
+    <string name="nav_calculators">Calculs</string>
+    <string name="calc_subtitle">Estimez vos coûts avec vos propres valeurs, sans véhicule ni compte.</string>
+    <string name="calc_trip_title">Coût d’un trajet</string>
+    <string name="calc_fill_title">Coût d’un plein</string>
+    <string name="calc_recharge_title">Coût d’une recharge</string>
+    <string name="calc_compare_title">Thermique ou électrique</string>
+    <string name="calc_mode_fuel">Carburant</string>
+    <string name="calc_mode_electric">Électrique</string>
+    <string name="calc_distance">Distance (%1$s)</string>
+    <string name="calc_fuel_consumption">Consommation (L/100 km)</string>
+    <string name="calc_electric_consumption">Consommation (kWh/100 km)</string>
+    <string name="calc_fuel_price">Prix du carburant (%1$s/L)</string>
+    <string name="calc_electric_price">Prix de l’électricité (%1$s/kWh)</string>
+    <string name="calc_liters">Quantité de carburant (L)</string>
+    <string name="calc_capacity">Capacité de la batterie (kWh)</string>
+    <string name="calc_start">Charge de départ (%)</string>
+    <string name="calc_target">Charge visée (%)</string>
+    <string name="calc_calculate">Calculer</string>
+    <string name="calc_liters_needed">Carburant nécessaire : %1$s L</string>
+    <string name="calc_energy_needed">Énergie nécessaire : %1$s kWh</string>
+    <string name="calc_energy_added">Énergie ajoutée : %1$s kWh</string>
+    <string name="calc_total">Coût estimé : %1$s %2$s</string>
+    <string name="calc_fuel_total">Thermique : %1$s %2$s</string>
+    <string name="calc_electric_total">Électrique : %1$s %2$s</string>
+    <string name="calc_difference">Écart : %1$s %2$s</string>
+    <string name="calc_fuel_cheaper">Le thermique est moins cher selon ces valeurs.</string>
+    <string name="calc_electric_cheaper">L’électrique est moins cher selon ces valeurs.</string>
+    <string name="calc_equal">Les deux trajets ont le même coût.</string>
+    <string name="calc_saving">Économie par rapport au trajet le plus cher : %1$s %%</string>
+    <string name="calc_recharge_note">Estimation théorique, hors pertes de recharge et variations de tarif.</string>
+    <string name="calc_compare_note">Comparaison du trajet uniquement, hors achat, assurance, entretien, dépréciation, taxes et pertes de recharge.</string>
+    <string name="calc_error_number">Saisissez un nombre fini valide, par exemple 12,5.</string>
+    <string name="calc_error_positive">Saisissez une valeur supérieure à zéro.</string>
+    <string name="calc_error_price">Saisissez un prix positif ou nul.</string>
+    <string name="calc_error_start">Saisissez une charge de 0 inclus à 100 exclu.</string>
+    <string name="calc_error_target">Saisissez une charge supérieure à 0 et au plus égale à 100.</string>
+    <string name="calc_error_order">La charge visée doit dépasser la charge de départ.</string>
+    <string name="calc_error_overflow">Résultat trop grand. Réduisez les valeurs saisies.</string>
 </resources>

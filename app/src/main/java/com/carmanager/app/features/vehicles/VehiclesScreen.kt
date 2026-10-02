@@ -1,5 +1,7 @@
 package com.carmanager.app.features.vehicles
 
+import com.carmanager.app.core.ui.components.CarManagerTopLevelAppBar
+import com.carmanager.app.core.ui.theme.CarManagerSpacing
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,15 +11,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.R
-import com.carmanager.app.core.ui.components.BannerAd
+import com.carmanager.app.core.ui.components.BannerAdSlot
+import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.components.VehicleItem
 import com.carmanager.app.core.ui.theme.VehicleColor
 
@@ -31,30 +39,31 @@ fun VehiclesScreen(
     onNavigateToMaintenance: (Long) -> Unit,
     viewModel: VehiclesViewModel = hiltViewModel()
 ) {
-    val vehicles by viewModel.vehicles.collectAsState()
+    val state by viewModel.uiState.collectAsState()
+    var fabHeightPixels by remember { mutableIntStateOf(0) }
+    val fabClearance = with(LocalDensity.current) { fabHeightPixels.toDp() } + 32.dp
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text(stringResource(R.string.vehicles_title), fontWeight = FontWeight.Bold) }
-                )
-            },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = onAddVehicle,
-                    containerColor = VehicleColor,
-                    contentColor = Color.White
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.vehicle_add))
-                }
+    Scaffold(
+        topBar = {
+            CarManagerTopLevelAppBar(title = stringResource(R.string.vehicles_title))
+        },
+        bottomBar = { if (canShowAds) BannerAdSlot() },
+        floatingActionButton = {
+            FloatingActionButton(
+                modifier = Modifier.onSizeChanged { fabHeightPixels = it.height },
+                onClick = onAddVehicle,
+                containerColor = VehicleColor,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.vehicle_add))
             }
-        ) { padding ->
+        }
+    ) { padding ->
+        LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { vehicles ->
             if (vehicles.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                        .fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -66,9 +75,8 @@ fun VehiclesScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentPadding = PaddingValues(16.dp),
+                        .fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, top = CarManagerSpacing.firstContentTop, end = 16.dp, bottom = fabClearance),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(vehicles) { vehicle ->
@@ -81,31 +89,9 @@ fun VehiclesScreen(
                             onDelete = { viewModel.deleteVehicle(vehicle) }
                         )
                     }
-                    // Spacer pour ne pas cacher le dernier item par la pub
-                    if (canShowAds) {
-                        item { Spacer(modifier = Modifier.height(80.dp)) }
-                    }
-                }
-            }
-        }
-
-        // Pub flottante en bas
-        if (canShowAds) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Card(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    BannerAd()
                 }
             }
         }
     }
+
 }

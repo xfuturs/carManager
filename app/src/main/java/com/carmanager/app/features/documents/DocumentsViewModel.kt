@@ -16,65 +16,106 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import java.io.File
+import kotlinx.coroutines.CancellationException
+import com.carmanager.app.core.data.local.OwnedDatabaseAccess
 
 @HiltViewModel
 class DocumentsViewModel @Inject constructor(
     private val documentRepository: DocumentRepository,
+    private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
+    private val access: OwnedDatabaseAccess,
     savedStateHandle: SavedStateHandle,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    private val workspaceOwner = session.owner.value
 
     val vehicleId: Long = checkNotNull(savedStateHandle["vehicleId"])
 
     private val _uiEvent = Channel<UiEvent>()
     val uiEvent = _uiEvent.receiveAsFlow()
 
-    val documents = documentRepository.observeByVehicle(vehicleId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    private val _rawDocuments = documentRepository.observeByVehicle(vehicleId)
+    
+    val documents = combine(_rawDocuments, _searchQuery) { docs, query ->
+        if (query.isBlank()) {
+            docs
+        } else {
+            docs.filter { it.title.contains(query, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun onSearchQueryChange(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun canOpen(document: Document): Boolean = runCatching {
+        session.requireCurrent(workspaceOwner)
+        check(document.ownerKey == workspaceOwner && document.vehicleId == vehicleId)
+    }.isSuccess
 
     fun addDocument(uri: Uri, title: String, category: DocumentCategory) {
         viewModelScope.launch {
-            val internalPath = FileStorageHelper.saveFileToInternalStorage(context, uri)
-            if (internalPath != null) {
-                val document = Document(
-                    vehicleId = vehicleId,
-                    title = title,
-                    category = category,
-                    filePath = internalPath,
-                    date = System.currentTimeMillis()
-                )
-                documentRepository.saveDocument(document)
+            var createdFile: String? = null
+            var committed = false
+            try {
+                access.write(workspaceOwner, vehicleId) {
+                    val path = FileStorageHelper.saveFileToInternalStorage(context, uri)
+                        ?: error("Erreur lors de la sauvegarde du fichier")
+                    createdFile = path
+                    documentRepository.saveDocument(Document(ownerKey = workspaceOwner, vehicleId = vehicleId,
+                        title = title, category = category, filePath = path, date = System.currentTimeMillis()))
+                }
+                committed = true
                 _uiEvent.send(UiEvent.ShowSnackbar("Document ajouté avec succès"))
-            } else {
-                _uiEvent.send(UiEvent.ShowSnackbar("Erreur lors de la sauvegarde du fichier"))
+            } catch (e: Exception) {
+                if (!committed) createdFile?.let { FileStorageHelper.deleteFile(it) }
+                if (e is CancellationException) throw e
+                _uiEvent.send(UiEvent.ShowSnackbar(e.message ?: "Sauvegarde impossible"))
             }
         }
     }
 
     fun convertToPdf(document: Document) {
         viewModelScope.launch {
-            val pdfPath = FileStorageHelper.convertImageToPdf(context, document.filePath)
-            if (pdfPath != null) {
-                val pdfDocument = Document(
-                    vehicleId = vehicleId,
-                    title = "${document.title} (PDF)",
-                    category = document.category,
-                    filePath = pdfPath,
-                    date = System.currentTimeMillis()
-                )
-                documentRepository.saveDocument(pdfDocument)
+            var createdFile: String? = null
+            var committed = false
+            try {
+                access.write(workspaceOwner, vehicleId) {
+                    check(document.ownerKey == workspaceOwner && document.vehicleId == vehicleId)
+                    val source = access.documentFile(workspaceOwner, document.id, document.filePath, File(context.filesDir, "vehicle_documents"))
+                    val path = FileStorageHelper.convertImageToPdf(context, source.path) ?: error("Erreur lors de la conversion")
+                    createdFile = path
+                    documentRepository.saveDocument(Document(ownerKey = workspaceOwner, vehicleId = vehicleId,
+                        title = "${document.title} (PDF)", category = document.category, filePath = path, date = System.currentTimeMillis()))
+                }
+                committed = true
                 _uiEvent.send(UiEvent.ShowSnackbar("Conversion réussie"))
-            } else {
-                _uiEvent.send(UiEvent.ShowSnackbar("Erreur lors de la conversion"))
+            } catch (e: Exception) {
+                if (!committed) createdFile?.let { FileStorageHelper.deleteFile(it) }
+                if (e is CancellationException) throw e
+                _uiEvent.send(UiEvent.ShowSnackbar(e.message ?: "Conversion impossible"))
             }
         }
     }
 
     fun deleteDocument(document: Document) {
         viewModelScope.launch {
-            FileStorageHelper.deleteFile(document.filePath)
-            documentRepository.deleteDocument(document)
-            _uiEvent.send(UiEvent.ShowSnackbar("Document supprimé"))
+            try {
+                access.write(workspaceOwner, vehicleId) {
+                    check(document.ownerKey == workspaceOwner && document.vehicleId == vehicleId)
+                    val file = access.documentFile(workspaceOwner, document.id, document.filePath, File(context.filesDir, "vehicle_documents"))
+                    check(!file.exists() || file.delete()) { "Impossible de supprimer le fichier." }
+                    documentRepository.deleteDocument(document)
+                }
+                _uiEvent.send(UiEvent.ShowSnackbar("Document supprimé"))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _uiEvent.send(UiEvent.ShowSnackbar(e.message ?: "Suppression impossible"))
+            }
         }
     }
 }

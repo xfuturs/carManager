@@ -1,5 +1,6 @@
 package com.carmanager.app.features.mileage
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,14 +33,9 @@ fun MileageHistoryScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Historique Compteur", fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        @Suppress("DEPRECATION")
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour")
-                    }
-                }
+            CarManagerBackAppBar(
+                title = "Historique Compteur",
+                onNavigateBack = onNavigateBack
             )
         }
     ) { padding ->

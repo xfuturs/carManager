@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CarManager.Starting" parent="Theme.CarManager">
+        <item name="android:windowBackground">@color/startup_surface</item>
+        <item name="android:windowSplashScreenBackground">@color/startup_surface</item>
+    </style>
+</resources>

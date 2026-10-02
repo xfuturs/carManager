@@ -4,6 +4,7 @@ import com.carmanager.app.core.domain.model.FuelRecord
 import com.carmanager.app.core.domain.model.Vehicle
 import com.carmanager.app.core.domain.model.FuelType
 import com.carmanager.app.core.domain.model.VehicleType
+import com.carmanager.app.core.domain.repository.DocumentRepository
 import com.carmanager.app.core.domain.repository.FuelRepository
 import com.carmanager.app.core.domain.repository.MaintenanceRepository
 import com.carmanager.app.core.domain.repository.VehicleRepository
@@ -14,17 +15,22 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import com.carmanager.app.core.domain.session.WorkspaceSession
+import com.carmanager.app.ownership.TestDeletionRegistry
 
 class GetDashboardStatsUseCaseTest {
 
     private val vehicleRepository = mockk<VehicleRepository>()
     private val fuelRepository = mockk<FuelRepository>()
     private val maintenanceRepository = mockk<MaintenanceRepository>()
+    private val documentRepository = mockk<DocumentRepository>()
     
     private val useCase = GetDashboardStatsUseCase(
         vehicleRepository,
         fuelRepository,
-        maintenanceRepository
+        maintenanceRepository,
+        documentRepository,
+        WorkspaceSession(TestDeletionRegistry())
     )
 
     @Test
@@ -38,6 +44,7 @@ class GetDashboardStatsUseCaseTest {
         every { vehicleRepository.observeAll() } returns flowOf(listOf(vehicle))
         every { fuelRepository.observeAll() } returns flowOf(listOf(fuel1, fuel2))
         every { maintenanceRepository.observeAll() } returns flowOf(emptyList())
+        every { documentRepository.observeAll() } returns flowOf(emptyList())
         every { fuelRepository.observeMonthlyTotal(any()) } returns flowOf(140.0)
         every { maintenanceRepository.observeMonthlyTotal(any()) } returns flowOf(0.0)
         every { maintenanceRepository.observeNextUpcoming() } returns flowOf(null)

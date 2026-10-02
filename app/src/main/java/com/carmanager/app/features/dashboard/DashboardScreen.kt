@@ -1,14 +1,21 @@
 package com.carmanager.app.features.dashboard
 
+import com.carmanager.app.core.ui.components.CarManagerTopLevelAppBar
+import com.carmanager.app.core.ui.theme.CarManagerSpacing
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import com.carmanager.app.core.util.UiEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -16,12 +23,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.R
 import com.carmanager.app.core.domain.model.DashboardStats
 import com.carmanager.app.core.domain.model.MaintenanceType
 import com.carmanager.app.core.domain.model.Vehicle
-import com.carmanager.app.core.ui.components.BannerAd
+import com.carmanager.app.core.ui.components.BannerAdSlot
+import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.components.DashboardStatItem
 import com.carmanager.app.core.ui.components.DashboardVehicleCard
 import com.carmanager.app.core.ui.theme.LocalAppUnits
@@ -43,11 +54,23 @@ fun DashboardScreen(
     onNavigateToDeadlines: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val stats by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var fabHeightPixels by remember { mutableIntStateOf(0) }
+    val fabClearance = with(LocalDensity.current) { fabHeightPixels.toDp() } + 32.dp
+    LaunchedEffect(viewModel) {
+        viewModel.uiEvent.collect { event ->
+            if (event is UiEvent.ShowSnackbar) snackbarHostState.showSnackbar(event.message)
+        }
+    }
 
     Scaffold(
+        topBar = { CarManagerTopLevelAppBar(title = stringResource(R.string.dashboard_title)) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = { if (canShowAds) BannerAdSlot() },
         floatingActionButton = {
             FloatingActionButton(
+                modifier = Modifier.onSizeChanged { fabHeightPixels = it.height },
                 onClick = onAddVehicle,
                 containerColor = VehicleColor,
                 contentColor = Color.White
@@ -59,48 +82,33 @@ fun DashboardScreen(
             }
         }
     ) { padding ->
-        DashboardContent(
-            stats = stats,
-            canShowAds = canShowAds,
-            modifier = Modifier.padding(padding),
-            onAddVehicle = onAddVehicle,
-            onEditVehicle = onEditVehicle,
-            onNavigateToFuel = onNavigateToFuel,
-            onNavigateToMaintenance = onNavigateToMaintenance,
-            onAdminClick = onAdminClick,
-            onDocumentsClick = onDocumentsClick,
-            onNavigateToAdvice = onNavigateToAdvice,
-            onNavigateToMileageHistory = onNavigateToMileageHistory,
-            onNavigateToStats = onNavigateToStats,
-            onNavigateToDeadlines = onNavigateToDeadlines,
-            onMileageUpdate = { vehicle, newMileage -> viewModel.updateMileage(vehicle, newMileage) }
-        )
-        
-        // Pub flottante en bas de l'écran
-        if (canShowAds) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Card(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    BannerAd()
-                }
-            }
+        LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { stats ->
+            DashboardContent(
+                stats = stats,
+                bottomContentPadding = fabClearance,
+                modifier = Modifier,
+                onAddVehicle = onAddVehicle,
+                onEditVehicle = onEditVehicle,
+                onNavigateToFuel = onNavigateToFuel,
+                onNavigateToMaintenance = onNavigateToMaintenance,
+                onAdminClick = onAdminClick,
+                onDocumentsClick = onDocumentsClick,
+                onNavigateToAdvice = onNavigateToAdvice,
+                onNavigateToMileageHistory = onNavigateToMileageHistory,
+                onNavigateToStats = onNavigateToStats,
+                onNavigateToDeadlines = onNavigateToDeadlines,
+                mileageSaveEnabled = !viewModel.isUpdatingMileage,
+                onMileageUpdate = { vehicle, newMileage -> viewModel.updateMileage(vehicle, newMileage) }
+            )
         }
+        
     }
 }
 
 @Composable
 private fun DashboardContent(
     stats: DashboardStats,
-    canShowAds: Boolean,
+    bottomContentPadding: Dp,
     onAddVehicle: () -> Unit,
     onEditVehicle: (Long) -> Unit,
     onNavigateToFuel: (Long) -> Unit,
@@ -111,6 +119,7 @@ private fun DashboardContent(
     onNavigateToMileageHistory: (Long) -> Unit,
     onNavigateToStats: () -> Unit,
     onNavigateToDeadlines: () -> Unit,
+    mileageSaveEnabled: Boolean,
     onMileageUpdate: (Vehicle, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -118,18 +127,8 @@ private fun DashboardContent(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        contentPadding = PaddingValues(16.dp)
+        contentPadding = PaddingValues(start = 16.dp, top = CarManagerSpacing.firstContentTop, end = 16.dp, bottom = bottomContentPadding)
     ) {
-        item {
-            Text(
-                text = stringResource(R.string.dashboard_title),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-        }
-
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -218,12 +217,12 @@ private fun DashboardContent(
                     onDocumentsClick = { onDocumentsClick(vehicleStats.vehicle.id) },
                     onAdviceClick = { onNavigateToAdvice(vehicleStats.vehicle.id) },
                     onMileageHistoryClick = { onNavigateToMileageHistory(vehicleStats.vehicle.id) },
+                    mileageSaveEnabled = mileageSaveEnabled,
                     onMileageUpdate = { newMileage -> onMileageUpdate(vehicleStats.vehicle, newMileage) }
                 )
             }
         }
         
-        item { Spacer(modifier = Modifier.height(48.dp)) }
     }
 }
 

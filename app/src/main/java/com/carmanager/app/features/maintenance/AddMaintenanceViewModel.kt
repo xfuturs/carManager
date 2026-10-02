@@ -21,14 +21,22 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import javax.inject.Inject
+import com.carmanager.app.core.domain.validation.NumericInput
+import com.carmanager.app.core.domain.validation.GarageValidation
+import com.carmanager.app.core.domain.validation.FormValidationException
+import kotlinx.coroutines.CancellationException
+import android.util.Log
+import com.carmanager.app.R
 
 @HiltViewModel
 class AddMaintenanceViewModel @Inject constructor(
     private val saveMaintenanceUseCase: SaveMaintenanceUseCase,
     private val vehicleRepository: VehicleRepository,
     @ApplicationContext private val context: Context,
+    private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    private val workspaceOwner = session.owner.value
 
     private val vehicleId: Long = checkNotNull(savedStateHandle["vehicleId"])
 
@@ -59,8 +67,19 @@ class AddMaintenanceViewModel @Inject constructor(
     var isScanning by mutableStateOf(false)
         private set
 
-    private val _uiEvent = Channel<UiEvent>()
+    var isSaving by mutableStateOf(false)
+        private set
+    var hasSaved by mutableStateOf(false)
+        private set
+    private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
+    private val _notificationPermissionRequests = Channel<Unit>(Channel.BUFFERED)
+    val notificationPermissionRequests = _notificationPermissionRequests.receiveAsFlow()
+    private var awaitingNotificationPermission = false
+    private var postSaveWarning: String? = null
+
+    var isVehicleLoaded by mutableStateOf(false)
+        private set
 
     init {
         val initialTypeStr = savedStateHandle.get<String>("initialType")
@@ -80,28 +99,29 @@ class AddMaintenanceViewModel @Inject constructor(
         viewModelScope.launch {
             vehicleRepository.observeById(vehicleId).firstOrNull()?.let { vehicle ->
                 currentVehicleMileage = vehicle.currentMileage
+                isVehicleLoaded = true
                 mileage = "" // Optionnel par défaut
             }
         }
     }
 
     fun onTypeChange(value: MaintenanceType) { 
-        type = value 
+        if (!isTypeLocked) type = value
     }
-    fun onMileageChange(value: String) { if (value.all { it.isDigit() }) mileage = value }
+    fun onMileageChange(value: String) { mileage = value }
     fun onCostChange(value: String) { cost = value }
     fun onNoteChange(value: String) { note = value }
-    fun onNextDueMileageChange(value: String) { if (value.all { it.isDigit() }) nextDueMileage = value }
+    fun onNextDueMileageChange(value: String) { nextDueMileage = value }
     fun onNextDueDateChange(value: Long?) { nextDueDate = value }
     fun onDateChange(value: Long) { date = value }
 
     fun onEstimatedMileageSelect(increment: Int) {
-        mileage = (currentVehicleMileage + increment).toString()
+        mileage = (currentVehicleMileage.toLong() + increment).toString()
     }
 
     fun applyMileageIncrement(increment: Int) {
         val base = mileage.toIntOrNull() ?: currentVehicleMileage
-        nextDueMileage = (base + increment).toString()
+        nextDueMileage = (base.toLong() + increment).toString()
     }
 
     fun applyDateIncrement(years: Int = 0, months: Int = 0) {
@@ -125,33 +145,60 @@ class AddMaintenanceViewModel @Inject constructor(
         }
     }
 
-    fun save() {
-        val enteredMileage = mileage.toIntOrNull() ?: currentVehicleMileage
-        
-        if (enteredMileage < currentVehicleMileage) {
-            viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar("Le kilométrage ne peut pas être inférieur au précédent ($currentVehicleMileage km)"))
-            }
+    fun save(notificationPermission: NotificationPermissionStatus = NotificationPermissionStatus.NOT_REQUIRED) {
+        if (isSaving || hasSaved || isScanning) return
+        val record = try {
+            session.requireWritable(workspaceOwner)
+            if (!isVehicleLoaded) throw FormValidationException("Attendez le chargement du véhicule.")
+            MaintenanceRecord(ownerKey = workspaceOwner, vehicleId = vehicleId, type = type, date = date,
+                mileage = if (mileage.isBlank()) currentVehicleMileage else NumericInput.integer(mileage, "Kilométrage"),
+                cost = if (cost.isBlank()) 0.0 else NumericInput.decimal(cost, "Coût"),
+                note = note.takeIf { it.isNotBlank() }, nextDueDate = nextDueDate,
+                nextDueMileage = NumericInput.optionalInteger(nextDueMileage, "Prochaine échéance kilométrique")
+            ).also { GarageValidation.maintenance(it) }
+        } catch (e: Exception) {
+            showErrors = true
+            viewModelScope.launch { _uiEvent.send(UiEvent.ShowSnackbar(
+                if (e is FormValidationException) e.message!! else "Rouvrez ce formulaire dans l'espace actif."
+            )) }
             return
         }
-
+        isSaving = true
         viewModelScope.launch {
             try {
-                val record = MaintenanceRecord(
-                    vehicleId = vehicleId,
-                    type = type,
-                    date = date,
-                    mileage = enteredMileage,
-                    cost = cost.toDoubleOrNull() ?: 0.0,
-                    note = note.takeIf { it.isNotBlank() },
-                    nextDueDate = nextDueDate,
-                    nextDueMileage = nextDueMileage.toIntOrNull()
-                )
-                saveMaintenanceUseCase(record)
-                _uiEvent.send(UiEvent.Success)
+                val result = saveMaintenanceUseCase(record)
+                hasSaved = true
+                postSaveWarning = result.warning
+                if (notificationPermission == NotificationPermissionStatus.MISSING &&
+                    record.nextDueDate?.let { it > System.currentTimeMillis() } == true) {
+                    // Le commit et la programmation sont déjà terminés. Le callback ne sauvegarde jamais.
+                    awaitingNotificationPermission = true
+                    _notificationPermissionRequests.send(Unit)
+                } else {
+                    completeSave(notificationsGranted = true)
+                }
             } catch (e: Exception) {
-                _uiEvent.send(UiEvent.ShowSnackbar("Erreur lors de la sauvegarde: ${e.localizedMessage}"))
-            }
+                if (e is CancellationException) throw e
+                Log.e("AddMaintenance", "Échec sauvegarde locale", e)
+                _uiEvent.send(UiEvent.ShowSnackbar(if (e is FormValidationException) e.message!! else
+                    "Sauvegarde impossible. Rouvrez le formulaire ou réessayez."))
+            } finally { isSaving = false }
         }
+    }
+
+    fun onNotificationPermissionResult(granted: Boolean) {
+        if (!hasSaved || !awaitingNotificationPermission) return
+        // Consommer le résultat avant de lancer la coroutine : un second callback est ignoré.
+        awaitingNotificationPermission = false
+        viewModelScope.launch { completeSave(notificationsGranted = granted) }
+    }
+
+    private suspend fun completeSave(notificationsGranted: Boolean) {
+        val warning = if (notificationsGranted) postSaveWarning else context.getString(
+            if (postSaveWarning == null) R.string.maintenance_saved_notifications_disabled
+            else R.string.maintenance_saved_reminder_failed_notifications_disabled
+        )
+        warning?.let { _uiEvent.send(UiEvent.ShowSnackbar(it)) }
+        _uiEvent.send(UiEvent.Success)
     }
 }

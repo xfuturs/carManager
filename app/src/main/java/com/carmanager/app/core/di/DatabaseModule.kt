@@ -22,7 +22,7 @@ object DatabaseModule {
             context,
             CarManagerDatabase::class.java,
             CarManagerDatabase.DATABASE_NAME,
-        ).addCallback(CarManagerDatabase.getCallback(context))
+        ).addMigrations(com.carmanager.app.core.data.local.WorkspaceMigration.MIGRATION_7_8).addCallback(CarManagerDatabase.getCallback(context))
             .build()
 
     @Provides

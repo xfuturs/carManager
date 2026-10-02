@@ -46,6 +46,7 @@ fun DashboardVehicleCard(
     onAdminClick: (MaintenanceType) -> Unit,
     onDocumentsClick: () -> Unit,
     onMileageUpdate: (Int) -> Unit,
+    mileageSaveEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var showMileageDialog by remember { mutableStateOf(false) }
@@ -83,7 +84,7 @@ fun DashboardVehicleCard(
             // BLOC ODOMÈTRE CENTRAL (Kilométrage proéminent)
             OdometerBlock(
                 mileage = vehicle.currentMileage,
-                onUpdateClick = { showMileageDialog = true },
+                onUpdateClick = { if (mileageSaveEnabled) { mileageInput = vehicle.currentMileage.toString(); showMileageDialog = true } },
                 onHistoryClick = onMileageHistoryClick
             )
 
@@ -118,6 +119,8 @@ fun DashboardVehicleCard(
     if (showMileageDialog) {
         MileageUpdateDialog(
             vehicleName = "${vehicle.brand} ${vehicle.model}",
+            minimumMileage = vehicle.currentMileage,
+            enabled = mileageSaveEnabled,
             initialValue = mileageInput,
             onDismiss = { showMileageDialog = false },
             onConfirm = { 
@@ -379,11 +382,14 @@ private fun ActionButtons(
 private fun MileageUpdateDialog(
     vehicleName: String,
     initialValue: String,
+    minimumMileage: Int,
+    enabled: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
     val units = LocalAppUnits.current
     var input by remember { mutableStateOf(initialValue) }
+    var inputError by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Mise à jour du kilométrage", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
@@ -393,15 +399,25 @@ private fun MileageUpdateDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = input,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) input = it },
+                    onValueChange = { input = it; inputError = null },
                     label = { Text("Kilométrage actuel") },
+                    isError = inputError != null,
+                    supportingText = { inputError?.let { Text(it) } },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(input) }) { Text("Valider") } },
+        confirmButton = { TextButton(enabled = enabled, onClick = {
+            try {
+                val value = com.carmanager.app.core.domain.validation.NumericInput.integer(input, "Kilométrage")
+                if (value < minimumMileage) inputError = "Le compteur ne peut pas diminuer."
+                else onConfirm(value.toString())
+            } catch (e: com.carmanager.app.core.domain.validation.FormValidationException) {
+                inputError = e.message
+            }
+        }) { Text("Valider") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
 }

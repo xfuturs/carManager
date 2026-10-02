@@ -1,5 +1,6 @@
 package com.carmanager.app.features.vehicles
 
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -53,23 +54,13 @@ fun AddEditVehicleScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            @Suppress("DEPRECATION")
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = if (viewModel.isEditMode) stringResource(R.string.vehicle_edit)
-                        else stringResource(R.string.vehicle_add),
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.cancel))
-                    }
-                },
+            CarManagerBackAppBar(
+                title = if (viewModel.isEditMode) stringResource(R.string.vehicle_edit) else stringResource(R.string.vehicle_add),
+                onNavigateBack = onNavigateBack,
+                backDescription = stringResource(R.string.cancel),
                 actions = {
                     if (viewModel.isEditMode) {
-                        IconButton(onClick = { showDeleteDialog = true }) {
+                        IconButton(onClick = { showDeleteDialog = true }, enabled = !viewModel.isSaving && !viewModel.hasSaved) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = stringResource(R.string.delete),
@@ -77,7 +68,7 @@ fun AddEditVehicleScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { viewModel.save() }) {
+                    IconButton(onClick = { viewModel.save() }, enabled = !viewModel.isSaving && !viewModel.hasSaved) {
                         Icon(Icons.Default.Check, contentDescription = stringResource(R.string.save))
                     }
                 }
@@ -110,7 +101,7 @@ fun AddEditVehicleScreen(
                 isCustom = viewModel.isCustomModel,
                 onValueChange = { valName, custom -> viewModel.onModelChange(valName, custom) },
                 isError = viewModel.showErrors && viewModel.model.isBlank(),
-                enabled = viewModel.brand.isNotBlank() && !viewModel.isCustomBrand
+                enabled = viewModel.brand.isNotBlank()
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -181,7 +172,7 @@ fun AddEditVehicleScreen(
                         onValueChange = viewModel::onTankCapacityChange,
                         label = { Text("Réservoir (L)") },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         isError = viewModel.isCapacityError
                     )
@@ -193,7 +184,7 @@ fun AddEditVehicleScreen(
                         onValueChange = viewModel::onBatteryCapacityChange,
                         label = { Text("Batterie (kWh)") },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         isError = viewModel.isCapacityError
                     )
@@ -202,6 +193,7 @@ fun AddEditVehicleScreen(
 
             Button(
                 onClick = { viewModel.save() },
+                enabled = !viewModel.isSaving && !viewModel.hasSaved,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 16.dp)
@@ -271,7 +263,8 @@ fun SearchableDropdown(
                         Icon(Icons.Default.Close, contentDescription = "Revenir à la liste")
                     }
                 },
-                isError = isError
+                isError = isError,
+                enabled = enabled
             )
         } else {
             ExposedDropdownMenuBox(

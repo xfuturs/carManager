@@ -10,33 +10,36 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MaintenanceDao {
-    @Query("SELECT * FROM maintenance_records WHERE vehicleId = :vehicleId ORDER BY date DESC")
-    fun observeByVehicle(vehicleId: Long): Flow<List<MaintenanceRecordEntity>>
+    @Query("SELECT maintenance_records.* FROM maintenance_records JOIN vehicles ON vehicles.id = maintenance_records.vehicleId WHERE vehicles.ownerKey = :ownerKey AND maintenance_records.vehicleId = :vehicleId ORDER BY date DESC")
+    fun observeByVehicle(vehicleId: Long, ownerKey: String): Flow<List<MaintenanceRecordEntity>>
 
-    @Query("SELECT * FROM maintenance_records ORDER BY date DESC")
-    fun observeAll(): Flow<List<MaintenanceRecordEntity>>
+    @Query("SELECT maintenance_records.* FROM maintenance_records JOIN vehicles ON vehicles.id = maintenance_records.vehicleId WHERE vehicles.ownerKey = :ownerKey ORDER BY date DESC")
+    fun observeAll(ownerKey: String): Flow<List<MaintenanceRecordEntity>>
 
-    @Query("SELECT * FROM maintenance_records")
-    suspend fun getAll(): List<MaintenanceRecordEntity>
+    @Query("SELECT maintenance_records.* FROM maintenance_records JOIN vehicles ON vehicles.id = maintenance_records.vehicleId WHERE vehicles.ownerKey = :ownerKey")
+    suspend fun getAll(ownerKey: String): List<MaintenanceRecordEntity>
 
     @Query(
         """
-        SELECT * FROM maintenance_records
-        WHERE nextDueDate IS NOT NULL AND nextDueDate >= :now
+        SELECT maintenance_records.* FROM maintenance_records JOIN vehicles ON vehicles.id = maintenance_records.vehicleId
+        WHERE vehicles.ownerKey = :ownerKey AND nextDueDate IS NOT NULL AND nextDueDate >= :now
         ORDER BY nextDueDate ASC
         LIMIT 1
         """,
     )
-    fun observeNextUpcoming(now: Long): Flow<MaintenanceRecordEntity?>
+    fun observeNextUpcoming(now: Long, ownerKey: String): Flow<MaintenanceRecordEntity?>
 
     @Query(
         """
         SELECT COALESCE(SUM(cost), 0)
-        FROM maintenance_records
-        WHERE date >= :startOfMonth AND date < :endOfMonth
+        FROM maintenance_records JOIN vehicles ON vehicles.id = maintenance_records.vehicleId
+        WHERE vehicles.ownerKey = :ownerKey AND maintenance_records.date >= :startOfMonth AND date < :endOfMonth
         """,
     )
-    fun observeMonthlyTotal(startOfMonth: Long, endOfMonth: Long): Flow<Double>
+    fun observeMonthlyTotal(startOfMonth: Long, endOfMonth: Long, ownerKey: String): Flow<Double>
+
+    @Query("SELECT maintenance_records.* FROM maintenance_records JOIN vehicles ON vehicles.id = maintenance_records.vehicleId WHERE vehicles.ownerKey = :ownerKey AND maintenance_records.id = :id")
+    suspend fun getById(id: Long, ownerKey: String): MaintenanceRecordEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(record: MaintenanceRecordEntity): Long

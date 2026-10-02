@@ -9,6 +9,8 @@ import com.carmanager.app.core.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +45,10 @@ class SettingsRepositoryImpl @Inject constructor(
         .map { preferences ->
             preferences[CURRENCY_KEY] ?: "€"
         }
+        .catch { error ->
+            if (error is CancellationException) throw error
+            emit("€")
+        }
 
     override suspend fun setCurrency(currency: String) {
         context.dataStore.edit { preferences ->
@@ -53,6 +59,10 @@ class SettingsRepositoryImpl @Inject constructor(
     override val distanceUnit: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[DISTANCE_UNIT_KEY] ?: "km"
+        }
+        .catch { error ->
+            if (error is CancellationException) throw error
+            emit("km")
         }
 
     override suspend fun setDistanceUnit(unit: String) {

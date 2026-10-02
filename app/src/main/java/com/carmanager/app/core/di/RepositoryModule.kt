@@ -13,11 +13,12 @@ import com.carmanager.app.core.domain.repository.VehicleRepository
 import com.carmanager.app.core.data.repository.AuthRepositoryImpl
 import com.carmanager.app.core.data.repository.PremiumRepositoryImpl
 import com.carmanager.app.core.data.repository.SettingsRepositoryImpl
-import com.carmanager.app.core.data.repository.SyncRepositoryImpl
+import com.carmanager.app.core.data.repository.DisabledSyncRepository
 import com.carmanager.app.core.domain.repository.AuthRepository
 import com.carmanager.app.core.domain.repository.PremiumRepository
 import com.carmanager.app.core.domain.repository.SettingsRepository
 import com.carmanager.app.core.domain.repository.SyncRepository
+import com.carmanager.app.core.data.repository.FirebaseAccountData
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -29,6 +30,14 @@ import javax.inject.Singleton
 abstract class RepositoryModule {
 
     @Binds
+    abstract fun bindDeletionRegistry(impl: com.carmanager.app.core.data.session.PersistentDeletionRegistry): com.carmanager.app.core.domain.session.DeletionRegistry
+
+    @Binds
+    abstract fun bindAccountRemoteData(impl: FirebaseAccountData): com.carmanager.app.core.domain.session.AccountRemoteData
+
+    @Binds
+    abstract fun bindLocalAccountData(impl: com.carmanager.app.core.data.local.LocalWorkspacePurger): com.carmanager.app.core.domain.session.LocalAccountData
+    @Binds
     @Singleton
     abstract fun bindAuthRepository(
         authRepositoryImpl: AuthRepositoryImpl
@@ -37,7 +46,7 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSyncRepository(
-        syncRepositoryImpl: SyncRepositoryImpl
+        syncRepositoryImpl: DisabledSyncRepository
     ): SyncRepository
 
     @Binds

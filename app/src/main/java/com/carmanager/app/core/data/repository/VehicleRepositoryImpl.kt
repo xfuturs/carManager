@@ -7,36 +7,34 @@ import com.carmanager.app.core.domain.model.Vehicle
 import com.carmanager.app.core.domain.repository.VehicleRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.carmanager.app.core.domain.session.WorkspaceSession
+import com.carmanager.app.core.data.local.OwnedDatabaseAccess
 import javax.inject.Inject
 
 class VehicleRepositoryImpl @Inject constructor(
-    private val vehicleDao: VehicleDao
+    private val vehicleDao: VehicleDao,
+    private val session: WorkspaceSession,
+    private val access: OwnedDatabaseAccess,
+    private val writer: com.carmanager.app.core.data.local.LocalGarageWriter
 ) : VehicleRepository {
 
     override fun observeAll(): Flow<List<Vehicle>> {
-        return vehicleDao.observeAll().map { entities ->
+        return session.observe { owner -> vehicleDao.observeAll(owner).map { entities ->
             entities.map { it.toDomain() }
-        }
+        } }
     }
 
     override fun observeById(id: Long): Flow<Vehicle?> {
-        return vehicleDao.observeById(id).map { it?.toDomain() }
+        return session.observe<Vehicle?> { owner -> vehicleDao.observeById(id, owner).map { it?.toDomain() } }
     }
 
     override fun observeCount(): Flow<Int> {
-        return vehicleDao.observeCount()
+        return session.observe { owner -> vehicleDao.observeCount(owner) }
     }
 
-    override suspend fun saveVehicle(vehicle: Vehicle): Long {
-        return if (vehicle.id == 0L) {
-            vehicleDao.insert(vehicle.toEntity())
-        } else {
-            vehicleDao.update(vehicle.toEntity())
-            vehicle.id
-        }
-    }
+    override suspend fun saveVehicle(vehicle: Vehicle): Long = writer.saveVehicle(vehicle)
 
     override suspend fun deleteVehicle(vehicle: Vehicle) {
-        vehicleDao.delete(vehicle.toEntity())
+        access.write(vehicle.ownerKey, vehicle.id) { vehicleDao.delete(vehicle.toEntity()) }
     }
 }

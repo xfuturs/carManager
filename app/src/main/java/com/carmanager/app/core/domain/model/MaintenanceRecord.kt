@@ -24,4 +24,5 @@ data class MaintenanceRecord(
     val note: String? = null,
     val nextDueDate: Long? = null,
     val nextDueMileage: Int? = null,
+    val ownerKey: String = "guest:local",
 )

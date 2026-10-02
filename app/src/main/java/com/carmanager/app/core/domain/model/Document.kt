@@ -7,6 +7,7 @@ enum class DocumentCategory {
     MAINTENANCE,         // Factures garage
     FUEL,                // Tickets carburant
     PHOTOS,              // Photos véhicule
+    CLAIMS,              // Sinistres, constats
     OTHER                // Divers
 }
 
@@ -16,5 +17,6 @@ data class Document(
     val title: String,
     val category: DocumentCategory,
     val filePath: String,
-    val date: Long
+    val date: Long,
+    val ownerKey: String = "guest:local",
 )

@@ -1,7 +1,11 @@
 .gradle
+.kotlin/
 local.properties
+admob.properties
 .idea/
 build/
+!buildSrc/src/main/java/com/carmanager/build/
+!buildSrc/src/main/java/com/carmanager/build/**
 captures/
 .externalNativeBuild
 .cxx
@@ -11,11 +15,32 @@ captures/
 
 # Generated files
 app/build/
-app/schemas/
+# Room schemas are preserved for migration review.
 
 # Keystore
 *.jks
 *.keystore
+*.p12
+*.pfx
+
+# Local signing and credential configuration
+.env
+.env.*
+keystore.properties
+signing.properties
+signing-config.properties
+credentials.json
+credentials-*.json
+*service-account*.json
+*service_account*.json
+serviceAccount*.json
+
+# Local validation records; retain them on this machine
+/reports/
+/tools/audit_release_artifact.py
+/tools/test_release_artifact_audit.py
+/tools/validate_local_write_sql.py
+/tools/validate_workspace_sql.py
 
 # Android Studio
 *.hprof

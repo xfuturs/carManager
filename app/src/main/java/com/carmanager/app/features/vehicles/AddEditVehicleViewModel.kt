@@ -20,6 +20,11 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.util.Calendar
 import javax.inject.Inject
+import com.carmanager.app.core.domain.validation.NumericInput
+import com.carmanager.app.core.domain.validation.GarageValidation
+import com.carmanager.app.core.domain.validation.FormValidationException
+import kotlinx.coroutines.CancellationException
+import android.util.Log
 
 @HiltViewModel
 class AddEditVehicleViewModel @Inject constructor(
@@ -28,8 +33,10 @@ class AddEditVehicleViewModel @Inject constructor(
     private val vehicleRepository: VehicleRepository,
     private val referenceDao: VehicleReferenceDao,
     @ApplicationContext private val context: Context,
+    private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    private val workspaceOwner = session.owner.value
 
     var brand by mutableStateOf("")
         private set
@@ -76,8 +83,14 @@ class AddEditVehicleViewModel @Inject constructor(
         private set
 
     private var currentVehicleId: Long = 0L
+    private var loadedVehicle: Vehicle? = null
+    private var modelsJob: kotlinx.coroutines.Job? = null
     
-    private val _uiEvent = Channel<UiEvent>()
+    var isSaving by mutableStateOf(false)
+        private set
+    var hasSaved by mutableStateOf(false)
+        private set
+    private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
     val allBrands: StateFlow<List<String>> = referenceDao.getAllBrands()
@@ -131,6 +144,9 @@ class AddEditVehicleViewModel @Inject constructor(
     private fun loadVehicle(id: Long) {
         viewModelScope.launch {
             vehicleRepository.observeById(id).firstOrNull()?.let { vehicle ->
+                loadedVehicle = vehicle
+                isCustomBrand = vehicle.brand !in referenceDao.getAllBrands().first()
+                isCustomModel = isCustomBrand
                 brand = vehicle.brand
                 model = vehicle.model
                 year = vehicle.year.toString()
@@ -148,44 +164,55 @@ class AddEditVehicleViewModel @Inject constructor(
         }
     }
 
-    fun onBrandChange(value: String, isCustom: Boolean = false) { 
+    fun onBrandChange(value: String, isCustom: Boolean = false) {
+        val modeChanged = isCustomBrand != isCustom
         brand = value
         isCustomBrand = isCustom
-        if (!isCustom) {
-            loadModelsForBrand(value)
-            model = "" // Reset model when brand changes
+        if (isCustom) {
+            modelsJob?.cancel()
+            _modelsForBrand.value = emptyList()
+            if (modeChanged) model = ""
+            isCustomModel = true
+        } else {
+            model = ""
             isCustomModel = false
+            loadModelsForBrand(value)
         }
     }
 
     private fun loadModelsForBrand(brandName: String) {
-        viewModelScope.launch {
+        modelsJob?.cancel()
+        if (isCustomBrand) return
+        modelsJob = viewModelScope.launch {
             referenceDao.getModelsForBrand(brandName).collect {
-                _modelsForBrand.value = it
+                if (brand == brandName && !isCustomBrand) {
+                    _modelsForBrand.value = it
+                    if (model.isNotBlank() && model !in it) isCustomModel = true
+                }
             }
         }
     }
 
-    fun onModelChange(value: String, isCustom: Boolean = false) { 
-        model = value 
-        isCustomModel = isCustom
+    fun onModelChange(value: String, isCustom: Boolean = false) {
+        model = value
+        isCustomModel = isCustom || isCustomBrand
     }
 
-    fun onYearChange(value: String) { if (value.all { it.isDigit() }) year = value }
-    fun onMileageChange(value: String) { if (value.all { it.isDigit() }) mileage = value }
+    fun onYearChange(value: String) { year = value }
+    fun onMileageChange(value: String) { mileage = value }
     fun onFuelTypeChange(value: FuelType) { fuelType = value }
     fun onVehicleTypeChange(value: VehicleType) { vehicleType = value }
     fun onLicensePlateChange(value: String) { licensePlate = value }
-    fun onPowerHpChange(value: String) { if (value.all { it.isDigit() }) powerHp = value }
+    fun onPowerHpChange(value: String) { powerHp = value }
     fun onTankCapacityChange(value: String) { tankCapacity = value }
     fun onBatteryCapacityChange(value: String) { batteryCapacity = value }
 
     fun onEstimatedMileageSelect(increment: Int) {
-        mileage = (currentVehicleMileage + increment).toString()
+        mileage = (currentVehicleMileage.toLong() + increment).toString()
     }
 
     fun deleteVehicle() {
-        if (!isEditMode) return
+        if (!isEditMode || isSaving || hasSaved) return
         viewModelScope.launch {
             try {
                 vehicleRepository.observeById(currentVehicleId).firstOrNull()?.let { vehicle ->
@@ -199,65 +226,49 @@ class AddEditVehicleViewModel @Inject constructor(
     }
 
     fun save() {
-        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-        val enteredYear = year.toIntOrNull()
-        
-        isYearError = enteredYear != null && (enteredYear < 1900 || enteredYear > currentYear)
-        
-        val enteredPower = powerHp.toIntOrNull()
-        isPowerError = enteredPower != null && (enteredPower <= 0 || enteredPower > 3000)
-        
-        val enteredTank = tankCapacity.toDoubleOrNull()
-        val enteredBattery = batteryCapacity.toDoubleOrNull()
-        isCapacityError = (enteredTank != null && (enteredTank <= 0 || enteredTank > 1000)) ||
-                          (enteredBattery != null && (enteredBattery <= 0 || enteredBattery > 1000))
-
-        if (brand.isBlank() || model.isBlank() || isYearError || isPowerError || isCapacityError) {
+        if (isSaving || hasSaved) return
+        val vehicle = try {
+            session.requireWritable(workspaceOwner)
+            if (isEditMode && loadedVehicle == null) throw FormValidationException("Attendez le chargement du véhicule.")
+            isYearError = year.trim().toIntOrNull()?.let { it !in 1900..Calendar.getInstance().get(Calendar.YEAR) } ?: true
+            isPowerError = powerHp.isNotBlank() && (powerHp.trim().toIntOrNull()?.let { it !in 1..3000 } ?: true)
+            isCapacityError = listOf(tankCapacity, batteryCapacity).any { text ->
+                val parsed = runCatching { NumericInput.decimal(text, "Capacité") }.getOrNull()
+                text.isNotBlank() && (parsed == null || parsed <= 0 || parsed > 1000)
+            }
+            val now = System.currentTimeMillis()
+            Vehicle(ownerKey = workspaceOwner, id = currentVehicleId, brand = brand.trim(), model = model.trim(),
+                year = NumericInput.integer(year, "Année"),
+                currentMileage = if (mileage.isBlank()) currentVehicleMileage else NumericInput.integer(mileage, "Kilométrage"),
+                fuelType = fuelType, type = vehicleType, licensePlate = licensePlate.takeIf { it.isNotBlank() },
+                powerHp = NumericInput.optionalInteger(powerHp, "Puissance"),
+                tankCapacity = NumericInput.optionalDecimal(tankCapacity, "Réservoir"),
+                batteryCapacity = NumericInput.optionalDecimal(batteryCapacity, "Batterie"),
+                createdAt = loadedVehicle?.createdAt ?: now, updatedAt = now
+            ).also {
+                GarageValidation.vehicle(it)
+                if (isEditMode && mileage.isNotBlank() && it.currentMileage < currentVehicleMileage)
+                    throw FormValidationException("Le compteur ne peut pas diminuer. Utilisez un relevé historique de plein ou d'entretien.")
+            }
+        } catch (e: Exception) {
             showErrors = true
-            val message = when {
-                isYearError -> "L'année doit être comprise entre 1900 et $currentYear"
-                isPowerError -> "La puissance doit être comprise entre 1 et 3000 ch"
-                isCapacityError -> "La capacité doit être comprise entre 1 et 1000 L/kWh"
-                else -> "Veuillez remplir les champs obligatoires (Marque, Modèle)"
-            }
-            viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar(message))
-            }
+            viewModelScope.launch { _uiEvent.send(UiEvent.ShowSnackbar(
+                if (e is FormValidationException) e.message!! else "Rouvrez ce formulaire dans l'espace actif."
+            )) }
             return
         }
-        
-        val enteredMileage = mileage.toIntOrNull() ?: currentVehicleMileage
-        
-        if (isEditMode && enteredMileage < currentVehicleMileage) {
-             viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar("Le kilométrage ne peut pas être inférieur au précédent ($currentVehicleMileage km)"))
-            }
-            return
-        }
-
+        isSaving = true
         viewModelScope.launch {
             try {
-                val now = System.currentTimeMillis()
-                val vehicle = Vehicle(
-                    id = currentVehicleId,
-                    brand = brand,
-                    model = model,
-                    year = year.toIntOrNull() ?: 0,
-                    currentMileage = enteredMileage,
-                    fuelType = fuelType,
-                    type = vehicleType,
-                    powerHp = powerHp.toIntOrNull(),
-                    licensePlate = licensePlate.takeIf { it.isNotBlank() },
-                    tankCapacity = tankCapacity.toDoubleOrNull(),
-                    batteryCapacity = batteryCapacity.toDoubleOrNull(),
-                    createdAt = if (isEditMode) 0L else now,
-                    updatedAt = now
-                )
                 saveVehicleUseCase(vehicle)
+                hasSaved = true
                 _uiEvent.send(UiEvent.Success)
             } catch (e: Exception) {
-                _uiEvent.send(UiEvent.ShowSnackbar("Erreur lors de l'enregistrement: ${e.localizedMessage}"))
-            }
+                if (e is CancellationException) throw e
+                Log.e("AddEditVehicle", "Échec sauvegarde locale", e)
+                _uiEvent.send(UiEvent.ShowSnackbar(if (e is FormValidationException) e.message!! else
+                    "Enregistrement impossible. Rouvrez le formulaire ou réessayez."))
+            } finally { isSaving = false }
         }
     }
 }

@@ -1,15 +1,13 @@
 package com.carmanager.app.core.ui.navigation
 
+import com.carmanager.app.core.ui.components.CarManagerBottomNavigation
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -19,6 +17,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.carmanager.app.features.auth.LoginScreen
+import com.carmanager.app.features.calculators.CalculatorsScreen
 import com.carmanager.app.features.dashboard.DashboardScreen
 import com.carmanager.app.features.dashboard.DeadlinesScreen
 import com.carmanager.app.features.dashboard.StatsScreen
@@ -46,39 +45,30 @@ fun CarManagerNavHost(
     val currentDestination = navBackStackEntry?.destination
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (TopLevelDestination.entries.any { it.route == currentDestination?.route }) {
-                NavigationBar {
-                    TopLevelDestination.entries.forEach { destination ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = stringResource(destination.titleRes),
-                                )
-                            },
-                            label = { Text(stringResource(destination.titleRes)) },
-                        )
+                CarManagerBottomNavigation(
+                    selectedDestination = TopLevelDestination.entries.firstOrNull { destination ->
+                        currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                    },
+                    onDestinationClick = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
-                }
+                )
             }
         },
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Screen.Dashboard.route,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
         ) {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
@@ -105,6 +95,9 @@ fun CarManagerNavHost(
                     onNavigateToFuel = { id -> navController.navigate(Screen.FuelList.createRoute(id)) },
                     onNavigateToMaintenance = { id -> navController.navigate(Screen.MaintenanceList.createRoute(id)) }
                 )
+            }
+            composable(Screen.Calculators.route) {
+                CalculatorsScreen()
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(

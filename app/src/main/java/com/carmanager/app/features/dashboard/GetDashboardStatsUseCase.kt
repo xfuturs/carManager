@@ -7,6 +7,8 @@ import com.carmanager.app.core.domain.repository.MaintenanceRepository
 import com.carmanager.app.core.domain.repository.VehicleRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import com.carmanager.app.core.domain.session.WorkspaceSession
+import com.carmanager.app.core.domain.session.observeLocalState
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -18,19 +20,24 @@ class GetDashboardStatsUseCase @Inject constructor(
     private val vehicleRepository: VehicleRepository,
     private val fuelRepository: FuelRepository,
     private val maintenanceRepository: MaintenanceRepository,
-    private val documentRepository: DocumentRepository
+    private val documentRepository: DocumentRepository,
+    private val session: WorkspaceSession
 ) {
-    operator fun invoke(): Flow<DashboardStats> {
+    operator fun invoke(): Flow<DashboardStats> = session.observe { calculateWorkspace() }
+
+    fun observeState(retry: Flow<Int>): Flow<LocalDataState<DashboardStats>> =
+        observeLocalState(session, retry) { calculateWorkspace() }
+
+    private fun calculateWorkspace(): Flow<DashboardStats> {
         val now = System.currentTimeMillis()
         
         val basicDataFlow = combine(
-            vehicleRepository.observeCount(),
             vehicleRepository.observeAll(),
             fuelRepository.observeAll(),
             maintenanceRepository.observeAll(),
             documentRepository.observeAll()
-        ) { count, vehicles, allFuel, allMaint, allDocs ->
-            BasicData(count, vehicles, allFuel, allMaint, allDocs)
+        ) { vehicles, allFuel, allMaint, allDocs ->
+            BasicData(vehicles, allFuel, allMaint, allDocs)
         }
 
         val totalsFlow = combine(
@@ -146,7 +153,7 @@ class GetDashboardStatsUseCase @Inject constructor(
             }
 
             DashboardStats(
-                vehicleCount = basic.count,
+                vehicleCount = basic.vehicles.size,
                 vehicles = vehicleStatsList,
                 monthlyFuelCost = totals.monthlyFuelTotal,
                 monthlyMaintenanceCost = totals.monthlyMaintenanceTotal,
@@ -163,7 +170,6 @@ class GetDashboardStatsUseCase @Inject constructor(
     }
 
     private data class BasicData(
-        val count: Int, 
         val vehicles: List<Vehicle>, 
         val allFuel: List<FuelRecord>, 
         val allMaint: List<MaintenanceRecord>,

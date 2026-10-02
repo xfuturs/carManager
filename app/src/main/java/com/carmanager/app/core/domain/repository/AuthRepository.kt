@@ -12,16 +12,6 @@ interface AuthRepository {
     val currentUser: StateFlow<User?>
 
     /**
-     * Connecte l'utilisateur avec Email/Mot de passe.
-     */
-    suspend fun signIn(email: String, password: String): Result<Unit>
-
-    /**
-     * Crée un nouveau compte utilisateur.
-     */
-    suspend fun signUp(email: String, password: String): Result<Unit>
-
-    /**
      * Déconnecte l'utilisateur actuel.
      */
     suspend fun signOut()

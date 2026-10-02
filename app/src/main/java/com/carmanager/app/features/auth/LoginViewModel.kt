@@ -1,75 +1,48 @@
 package com.carmanager.app.features.auth
 
-import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.carmanager.app.core.domain.repository.AuthRepository
 import com.carmanager.app.core.util.UiEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class LoginViewModel @Inject constructor(
-    private val authRepository: AuthRepository
-) : ViewModel() {
-
-    var email by mutableStateOf("")
-        private set
-    var password by mutableStateOf("")
-        private set
-    var isSignUp by mutableStateOf(false)
-        private set
-    var isPrivacyAccepted by mutableStateOf(false)
-        private set
+class LoginViewModel @Inject constructor(private val authRepository: AuthRepository) : ViewModel() {
     var isLoading by mutableStateOf(false)
         private set
-
-    private val _uiEvent = Channel<UiEvent>()
+    private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
-    fun onEmailChange(value: String) { email = value }
-    fun onPasswordChange(value: String) { password = value }
-    fun onPrivacyChange(value: Boolean) { isPrivacyAccepted = value }
-    fun toggleMode() { isSignUp = !isSignUp }
-
-    fun onGoogleSignIn(idToken: String) {
-        viewModelScope.launch {
-            isLoading = true
-            val result = authRepository.signInWithGoogle(idToken)
-            isLoading = false
-            if (result.isSuccess) {
-                _uiEvent.send(UiEvent.Success)
-            } else {
-                _uiEvent.send(UiEvent.ShowSnackbar(result.exceptionOrNull()?.localizedMessage ?: "Erreur Google"))
-            }
-        }
+    fun onGoogleSignInError(message: String) {
+        viewModelScope.launch { _uiEvent.send(UiEvent.ShowSnackbar(message)) }
     }
 
-    fun onSubmit() {
-        if (email.isBlank() || password.isBlank()) return
-        if (isSignUp && !isPrivacyAccepted) {
-            viewModelScope.launch {
-                _uiEvent.send(UiEvent.ShowSnackbar("Veuillez accepter la politique de confidentialité."))
-            }
+    fun onGoogleSignIn(idToken: String) {
+        if (isLoading) return
+        if (idToken.isBlank()) {
+            onGoogleSignInError("Connexion Google impossible. Réessayez.")
             return
         }
-        
+        isLoading = true
         viewModelScope.launch {
-            isLoading = true
-            val result = if (isSignUp) {
-                authRepository.signUp(email, password)
-            } else {
-                authRepository.signIn(email, password)
-            }
-            
-            isLoading = false
-            if (result.isSuccess) {
-                _uiEvent.send(UiEvent.Success)
-            } else {
-                _uiEvent.send(UiEvent.ShowSnackbar(result.exceptionOrNull()?.localizedMessage ?: "Erreur d'authentification"))
+            try {
+                val result = authRepository.signInWithGoogle(idToken)
+                _uiEvent.send(if (result.isSuccess) UiEvent.Success else UiEvent.ShowSnackbar(
+                    result.exceptionOrNull()?.localizedMessage ?: "Connexion Google impossible. Réessayez."
+                ))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _uiEvent.send(UiEvent.ShowSnackbar(e.localizedMessage ?: "Connexion Google impossible. Réessayez."))
+            } finally {
+                isLoading = false
             }
         }
     }

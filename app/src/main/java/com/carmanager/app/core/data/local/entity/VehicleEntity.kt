@@ -1,9 +1,11 @@
 package com.carmanager.app.core.data.local.entity
 
+import androidx.room.ColumnInfo
+import androidx.room.Index
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "vehicles")
+@Entity(tableName = "vehicles", indices = [Index("ownerKey")])
 data class VehicleEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -22,4 +24,6 @@ data class VehicleEntity(
     /** Réservé pour synchronisation cloud future */
     val remoteId: String? = null,
     val syncStatus: String = "LOCAL",
+    @ColumnInfo(defaultValue = "'guest:local'")
+    val ownerKey: String = "guest:local",
 )
