@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="fr">
     <string name="app_name">Car Manager</string>
 
     <!-- Navigation -->
@@ -38,7 +38,7 @@
     <!-- Carburant -->
     <string name="fuel_title">Historique carburant</string>
     <string name="fuel_add">Ajouter un plein</string>
-    <string name="fuel_empty">Aucun plein enregistré</string>
+    <string name="fuel_empty">Aucun plein ni recharge</string>
     <string name="fuel_liters">Litres</string>
     <string name="fuel_price_per_liter">Prix au litre</string>
     <string name="fuel_total_price">Prix total</string>
@@ -85,8 +85,8 @@
     <string name="error_generic">Une erreur est survenue</string>
 
     <!-- Scan IA -->
-    <string name="ocr_scan_fuel">Scanner un ticket de station (IA)</string>
-    <string name="ocr_scan_maintenance">Scanner une facture (IA)</string>
+    <string name="ocr_scan_fuel">Scanner un reçu</string>
+    <string name="ocr_scan_maintenance">Scanner un reçu</string>
     <string name="ocr_analyzing">Analyse en cours…</string>
     <string name="ocr_finished">Analyse terminée</string>
 
@@ -126,8 +126,21 @@
     <string name="premium_delete_account">Supprimer mon compte et mes données</string>
     <string name="premium_account_section">Compte</string>
     <string name="premium_title">Premium</string>
-    <string name="premium_benefits">Sans publicités et rapports de revente PDF. Achat unique via Google Play, disponible aussi en mode invité.</string>
-    <string name="premium_one_time_price">Achat unique · %1$s</string>
+    <string name="premium_benefits">Vos avantages Premium — achat unique via Google Play, disponible aussi en mode invité.</string>
+    <string name="premium_benefit_ads">Suppression des publicités</string>
+    <string name="premium_benefit_pdf">Création de rapports PDF du véhicule</string>
+    <string name="premium_benefit_sections">Choix des sections incluses dans chaque rapport</string>
+    <string name="premium_benefit_library">Conservation de vos rapports dans Documents, rubrique Rapports Car Manager</string>
+    <string name="premium_benefit_save_share">Copie vers l’emplacement de votre choix et partage des rapports</string>
+    <string name="premium_existing_reports_free">Les rapports déjà enregistrés restent consultables, copiables et partageables sans droit Premium actif.</string>
+    <string name="premium_refund_title">Politique de remboursement</string>
+    <string name="premium_refund_1">Les demandes de remboursement sont traitées conformément aux procédures de Google Play et à la législation applicable.</string>
+    <string name="premium_refund_2">Google Play indique que certaines demandes effectuées dans les 48 heures suivant l’achat peuvent être traitées directement par Google Play. Au-delà de ce délai, l’utilisateur peut être invité à contacter le développeur.</string>
+    <string name="premium_refund_3">Pour les demandes fondées uniquement sur un changement d’avis, Car Manager peut refuser une demande présentée plus de 14 jours calendaires après l’achat.</string>
+    <string name="premium_refund_4">Ce délai commercial de 14 jours ne limite pas les droits impératifs du consommateur. Un remboursement peut notamment rester dû lorsque la législation applicable l’exige, par exemple en cas de défaut de conformité, de transaction non autorisée ou dans toute autre situation protégée par la loi.</string>
+    <string name="premium_refund_5">Les règles relatives au droit de rétractation des contenus et services numériques peuvent prévoir des exceptions lorsque l’exécution a commencé avant la fin du délai légal et que les conditions légales nécessaires sont réunies.</string>
+    <string name="premium_refund_6">En cas de remboursement ou de révocation de l’achat Premium, les fonctionnalités nécessitant un droit Premium actif redeviennent indisponibles. Les données et rapports déjà enregistrés localement ne sont pas supprimés pour ce motif.</string>
+    <string name="premium_one_time_price">%1$s</string>
     <string name="premium_purchase">Passer à Premium</string>
     <string name="premium_refresh">Restaurer / actualiser Premium</string>
     <string name="premium_active">Premium actif</string>
@@ -149,7 +162,12 @@
     <string name="settings_version">Version</string>
     <!-- V0.A6 : outils autonomes, sans stockage des saisies. -->
     <string name="nav_calculators">Calculs</string>
-    <string name="calc_subtitle">Estimez vos coûts avec vos propres valeurs, sans véhicule ni compte.</string>
+    <string name="calc_subtitle">Vos coûts, sans véhicule ni compte.</string>
+    <string name="calc_tool_trip">Trajet</string>
+    <string name="calc_tool_fill">Plein</string>
+    <string name="calc_tool_recharge">Recharge</string>
+    <string name="calc_tool_compare">Thermique vs électrique</string>
+    <string name="calc_money_value">%1$s %2$s</string>
     <string name="calc_trip_title">Coût d’un trajet</string>
     <string name="calc_fill_title">Coût d’un plein</string>
     <string name="calc_recharge_title">Coût d’une recharge</string>
@@ -169,10 +187,10 @@
     <string name="calc_liters_needed">Carburant nécessaire : %1$s L</string>
     <string name="calc_energy_needed">Énergie nécessaire : %1$s kWh</string>
     <string name="calc_energy_added">Énergie ajoutée : %1$s kWh</string>
-    <string name="calc_total">Coût estimé : %1$s %2$s</string>
-    <string name="calc_fuel_total">Thermique : %1$s %2$s</string>
-    <string name="calc_electric_total">Électrique : %1$s %2$s</string>
-    <string name="calc_difference">Écart : %1$s %2$s</string>
+    <string name="calc_total">Coût estimé</string>
+    <string name="calc_fuel_total">Thermique</string>
+    <string name="calc_electric_total">Électrique</string>
+    <string name="calc_difference">Écart</string>
     <string name="calc_fuel_cheaper">Le thermique est moins cher selon ces valeurs.</string>
     <string name="calc_electric_cheaper">L’électrique est moins cher selon ces valeurs.</string>
     <string name="calc_equal">Les deux trajets ont le même coût.</string>
@@ -186,4 +204,17 @@
     <string name="calc_error_target">Saisissez une charge supérieure à 0 et au plus égale à 100.</string>
     <string name="calc_error_order">La charge visée doit dépasser la charge de départ.</string>
     <string name="calc_error_overflow">Résultat trop grand. Réduisez les valeurs saisies.</string>
+
+    <string name="docs_category_reports">Rapports Car Manager</string>
+    <string name="premium_purchase_disclosure">Achat unique • Aucun abonnement • Aucun renouvellement automatique</string>
+    <string name="premium_future_note">Votre achat n’est jamais converti automatiquement en abonnement. De futures fonctionnalités ou services pourront être proposés séparément.</string>
+    <string name="premium_terms_title">Conditions de l’offre Premium</string>
+    <string name="premium_terms_1">L’offre Premium actuellement proposée est un achat unique, facturé au prix affiché par Google Play au moment de la commande. Elle ne comporte aucun abonnement ni renouvellement automatique.</string>
+    <string name="premium_terms_2">L’achat donne accès aux fonctionnalités Premium comprises dans l’offre au moment de l’achat, sous réserve de la disponibilité de l’application et des services nécessaires à leur fonctionnement.</string>
+    <string name="premium_terms_3">Car Manager peut faire évoluer à l’avenir son modèle économique et proposer de nouvelles formules, fonctionnalités ou services, notamment sous la forme d’un abonnement distinct.</string>
+    <string name="premium_terms_4">Une telle évolution ne convertit jamais automatiquement un achat unique existant en abonnement. Aucun prélèvement récurrent n’est effectué sans une nouvelle action et un consentement exprès de l’utilisateur via le parcours d’achat applicable.</string>
+    <string name="premium_terms_5">Les fonctionnalités Premium comprises dans l’achat unique déjà acquis restent rattachées à cet achat. Les fonctionnalités ou services nouveaux, notamment ceux nécessitant une fourniture continue, peuvent être proposés séparément ou réservés à une nouvelle formule.</string>
+    <string name="premium_terms_6">Les données et documents déjà enregistrés localement, notamment les rapports PDF générés, restent accessibles, ouvrables, partageables, exportables et supprimables même si l’utilisateur ne dispose plus d’un droit permettant de générer de nouveaux rapports, sous réserve qu’ils soient toujours présents sur l’appareil et lisibles par l’application.</string>
+    <string name="premium_terms_7">En cas de remboursement, révocation ou absence de propriété valide reconnue par Google Play, les fonctionnalités Premium nécessitant un droit actif peuvent redevenir indisponibles. Les données et documents locaux existants ne sont pas supprimés pour ce motif.</string>
+    <string name="premium_terms_8">Ces conditions ne limitent pas les droits impératifs dont bénéficie l’utilisateur en vertu de la législation applicable.</string>
 </resources>

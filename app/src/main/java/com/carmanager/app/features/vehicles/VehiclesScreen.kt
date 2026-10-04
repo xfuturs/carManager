@@ -1,6 +1,6 @@
 package com.carmanager.app.features.vehicles
 
-import com.carmanager.app.core.ui.components.CarManagerTopLevelAppBar
+import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import com.carmanager.app.core.ui.theme.CarManagerSpacing
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +33,7 @@ import com.carmanager.app.core.ui.theme.VehicleColor
 @Composable
 fun VehiclesScreen(
     canShowAds: Boolean,
+    onNavigateBack: () -> Unit,
     onAddVehicle: () -> Unit,
     onEditVehicle: (Long) -> Unit,
     onNavigateToFuel: (Long) -> Unit,
@@ -44,8 +45,9 @@ fun VehiclesScreen(
     val fabClearance = with(LocalDensity.current) { fabHeightPixels.toDp() } + 32.dp
 
     Scaffold(
+        modifier = Modifier.navigationBarsPadding(),
         topBar = {
-            CarManagerTopLevelAppBar(title = stringResource(R.string.vehicles_title))
+            CarManagerBackAppBar(title = stringResource(R.string.vehicles_title), onNavigateBack = onNavigateBack)
         },
         bottomBar = { if (canShowAds) BannerAdSlot() },
         floatingActionButton = {
@@ -79,7 +81,7 @@ fun VehiclesScreen(
                     contentPadding = PaddingValues(start = 16.dp, top = CarManagerSpacing.firstContentTop, end = 16.dp, bottom = fabClearance),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(vehicles) { vehicle ->
+                    items(vehicles, key = { it.id }) { vehicle ->
                         VehicleItem(
                             vehicle = vehicle,
                             onClick = { onNavigateToFuel(vehicle.id) },

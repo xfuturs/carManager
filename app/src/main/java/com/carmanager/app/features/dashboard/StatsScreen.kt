@@ -1,106 +1,89 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.carmanager.app.features.dashboard
 
-import com.carmanager.app.core.ui.components.CarManagerBackAppBar
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.carmanager.app.BuildConfig
 import com.carmanager.app.core.domain.model.FuelType
-import com.carmanager.app.core.ui.components.StatCard
-import com.carmanager.app.core.ui.components.LocalDataContent
+import com.carmanager.app.core.ui.components.*
+import com.carmanager.app.core.ui.theme.CarManagerShapes
 import com.carmanager.app.core.ui.theme.LocalAppUnits
-import com.carmanager.app.core.ui.theme.OnFuelColor
-import com.carmanager.app.core.ui.theme.MaintenanceColor
-import com.carmanager.app.core.ui.theme.VehicleColor
 import com.carmanager.app.core.util.DateFormatter
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.common.fill
+import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen(
-    onNavigateBack: () -> Unit,
-    viewModel: DashboardViewModel = hiltViewModel()
-) {
+fun StatsScreen(onNavigateBack: () -> Unit, viewModel: DashboardViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val isPremium by viewModel.isPremium.collectAsState()
     val units = LocalAppUnits.current
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    val reportActions = com.carmanager.app.features.documents.reportUiActions(snackbar)
+    val generatedReport by viewModel.generatedReport.collectAsState()
+    val draft by viewModel.reportDraft.collectAsState()
+    draft?.let { ReportConfigurationDialog(it, viewModel::toggleReportSection, viewModel::cancelReportDraft, {
+        if (isPremium || BuildConfig.DEBUG) viewModel.confirmReportDraft()
+        else viewModel.cancelReportDraft()
+    }) }
+    LaunchedEffect(viewModel) { viewModel.uiEvent.collect { event ->
+        if (event is com.carmanager.app.core.util.UiEvent.ShowSnackbar) snackbar.showSnackbar(event.message)
+    } }
+    generatedReport?.let { report ->
+        AlertDialog(onDismissRequest = viewModel::closeReportResult,
+            title = { Text("Rapport enregistré dans Car Manager") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(report.title)
+                Text("Retrouvez-le dans Documents > Rapports Car Manager.", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { reportActions.save(report); viewModel.closeReportResult() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Enregistrer une copie") }
+                TextButton(onClick = { reportActions.share(report); viewModel.closeReportResult() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Partager") }
+                TextButton(onClick = { reportActions.open(report); viewModel.closeReportResult() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Ouvrir") }
+            } }, confirmButton = { TextButton(onClick = viewModel::closeReportResult) { Text("Fermer") } })
+    }
 
-    Scaffold(
-        topBar = {
-            CarManagerBackAppBar(
-                title = "Statistiques Globales",
-                onNavigateBack = onNavigateBack
-            )
-        }
-    ) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = { CarManagerBackAppBar(title = "Statistiques globales", onNavigateBack = onNavigateBack) }) { padding ->
         LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { stats ->
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                item {
-                    Text(
-                        "Répartition des dépenses ce mois",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        StatCard(
-                            title = "Carburant",
-                            value = "%.2f".format(stats.monthlyFuelCost) + " " + units.currency,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "Entretien",
-                            value = "%.2f".format(stats.monthlyMaintenanceCost) + " " + units.currency,
-                            modifier = Modifier.weight(1f)
-                        )
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (viewModel.isPreparingReport || viewModel.isGeneratingReport) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                if (stats.vehicles.isEmpty()) {
+                    item { CompactEmptyState(Icons.Default.BarChart, "Aucune statistique pour le moment",
+                        "Ajoutez un véhicule, puis des pleins ou des entretiens pour suivre vos dépenses.") }
+                } else {
+                    item { SecondarySectionTitle("Dépenses ce mois") }
+                    item {
+                        StatsMetricGroup {
+                            StatsMetric("Carburant", "%.2f".format(stats.monthlyFuelCost) + " " + units.currency)
+                            StatsMetric("Entretien", "%.2f".format(stats.monthlyMaintenanceCost) + " " + units.currency)
+                        }
                     }
-                }
-
-                item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text(
-                        "Performance par véhicule",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                items(stats.vehicles) { vehicleStats ->
-                    VehicleStatsSummary(
-                        stats = vehicleStats,
-                        isPremium = isPremium,
-                        onGenerateReport = { viewModel.generateReport(context, vehicleStats.vehicle.id) }
-                    )
+                    item { SecondarySectionTitle("Performance par véhicule") }
+                    items(stats.vehicles, key = { it.vehicle.id }) { vehicleStats ->
+                        VehicleStatsSummary(vehicleStats, isPremium) { viewModel.prepareReport(vehicleStats.vehicle.id) }
+                    }
                 }
             }
         }
@@ -108,97 +91,90 @@ fun StatsScreen(
 }
 
 @Composable
-fun VehicleStatsSummary(
-    stats: com.carmanager.app.core.domain.model.VehicleStats,
-    isPremium: Boolean,
-    onGenerateReport: () -> Unit
-) {
+fun VehicleStatsSummary(stats: com.carmanager.app.core.domain.model.VehicleStats, isPremium: Boolean, onGenerateReport: () -> Unit) {
     val vehicle = stats.vehicle
     val units = LocalAppUnits.current
     val fuelUnit = if (vehicle.fuelType == FuelType.ELECTRIC) "kWh/100" else "L/100"
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = "${vehicle.brand} ${vehicle.model}",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = VehicleColor,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                StatColumn(label = "Conso. Moy.", value = if (stats.fuelRecordsCount > 1) "%.1f".format(stats.averageConsumption) + " " + fuelUnit else "-- $fuelUnit")
-                StatColumn(label = "Dépenses Totales", value = "%.0f".format(stats.totalFuelCost + stats.yearlyMaintenanceCost) + " " + units.currency)
-                StatColumn(label = "Distance", value = "${stats.distanceTracked} ${units.distance}")
+    SecondaryPanel {
+        SecondarySectionTitle("${vehicle.brand} ${vehicle.model}")
+        StatsMetricGroup {
+            StatsMetric("Consommation moyenne", if (stats.fuelRecordsCount > 1) "%.1f".format(stats.averageConsumption) + " " + fuelUnit else "-- $fuelUnit")
+            StatsMetric("Dépenses totales", "%.0f".format(stats.totalFuelCost + stats.yearlyMaintenanceCost) + " " + units.currency)
+            StatsMetric("Distance", "${stats.distanceTracked} ${units.distance}")
+        }
+        Text("Dernier relevé : ${DateFormatter.formatShort(vehicle.updatedAt)}", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        if (stats.consumptionHistory.size > 1) {
+            ConsumptionGraph(stats.consumptionHistory, fuelUnit)
+        } else {
+            Text("Évolution de la consommation : données insuffisantes. Ajoutez des pleins ou recharges pour afficher la courbe.",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        if (isPremium) {
+            OutlinedButton(onClick = onGenerateReport, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                shape = CarManagerShapes.control) {
+                Icon(Icons.Default.PictureAsPdf, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Générer le rapport de revente (PDF)", Modifier.weight(1f))
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Dernier relevé : ${DateFormatter.formatShort(vehicle.updatedAt)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-
-            if (stats.consumptionHistory.size > 1) {
-                Spacer(modifier = Modifier.height(24.dp))
-                ConsumptionGraph(stats.consumptionHistory)
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Button(
-                onClick = onGenerateReport,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = isPremium,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isPremium) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Icon(Icons.Default.PictureAsPdf, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (isPremium) "GÉNÉRER RAPPORT REVENTE (PDF)" else "RAPPORT PDF (PREMIUM UNIQUEMENT)")
+        } else {
+            Surface(Modifier.fillMaxWidth(), shape = CarManagerShapes.control, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Lock, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Rapport de revente PDF · Premium", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Fonction verrouillée. Activez Premium dans Paramètres pour générer et partager ce rapport.",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // La garde constante retire cette action du code compilé en release.
+                        if (BuildConfig.DEBUG && PdfAccessPolicy.resolve(BuildConfig.DEBUG, isPremium) == PdfAccess.DEBUG_TEST) {
+                            DebugPdfTestAction(onGenerateReport)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+/** Les tuiles se replient ; aucune hauteur fixe ne contraint les valeurs agrandies. */
 @Composable
-private fun StatColumn(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun StatsMetricGroup(content: @Composable FlowRowScope.() -> Unit) {
+    val fontScale = LocalDensity.current.fontScale
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth >= 320.dp * fontScale && fontScale <= 1.3f) 2 else 1
+        FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = columns,
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 
 @Composable
-private fun ConsumptionGraph(history: List<Double>) {
+private fun FlowRowScope.StatsMetric(label: String, value: String) {
+    Surface(Modifier.weight(1f), shape = CarManagerShapes.control, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.padding(12.dp).semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 32.sp), fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun ConsumptionGraph(history: List<Double>, fuelUnit: String) {
     val modelProducer = remember { CartesianChartModelProducer() }
-    
     LaunchedEffect(history) {
-        modelProducer.runTransaction {
-            lineSeries { series(history) }
-        }
+        modelProducer.runTransaction { lineSeries { series(history) } }
     }
-
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Évolution de la consommation", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(8.dp))
-        CartesianChartHost(
-            chart = rememberCartesianChart(rememberLineCartesianLayer()),
-            modelProducer = modelProducer,
-            modifier = Modifier.height(120.dp).fillMaxWidth()
-        )
+    val line = rememberLine(fill = LineCartesianLayer.LineFill.single(fill(MaterialTheme.colorScheme.primary)))
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Évolution de la consommation ($fuelUnit)", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CartesianChartHost(chart = rememberCartesianChart(rememberLineCartesianLayer(
+            lineProvider = LineCartesianLayer.LineProvider.series(line))), modelProducer = modelProducer,
+            modifier = Modifier.height(160.dp).fillMaxWidth().semantics {
+                contentDescription = "Consommation, ${history.size} relevés dans l'ordre existant, en $fuelUnit : " +
+                    history.joinToString(" ; ") { "%.1f".format(it) }
+            })
     }
 }

@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.*
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -20,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -37,6 +38,16 @@ import com.carmanager.app.core.ui.components.DashboardStatItem
 import com.carmanager.app.core.ui.components.DashboardVehicleCard
 import com.carmanager.app.core.ui.theme.LocalAppUnits
 import com.carmanager.app.core.ui.theme.VehicleColor
+import com.carmanager.app.core.ui.theme.CarManagerShapes
+import com.carmanager.app.core.ui.theme.CarManagerTypography
+import com.carmanager.app.core.ui.theme.CarManagerDimensions
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Event
+import java.util.concurrent.TimeUnit
 import com.carmanager.app.core.util.DateFormatter
 
 @Composable
@@ -50,6 +61,7 @@ fun DashboardScreen(
     onDocumentsClick: (Long) -> Unit,
     onNavigateToAdvice: (Long) -> Unit,
     onNavigateToMileageHistory: (Long) -> Unit,
+    onNavigateToVehicles: () -> Unit,
     onNavigateToStats: () -> Unit,
     onNavigateToDeadlines: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
@@ -65,7 +77,13 @@ fun DashboardScreen(
     }
 
     Scaffold(
-        topBar = { CarManagerTopLevelAppBar(title = stringResource(R.string.dashboard_title)) },
+        topBar = { CarManagerTopLevelAppBar(title = stringResource(R.string.dashboard_title), actions = {
+            val appearance = com.carmanager.app.core.ui.theme.LocalAppAppearance.current
+            IconButton(onClick = viewModel::toggleAppearance, modifier = Modifier.size(48.dp)) {
+                Icon(if (appearance == com.carmanager.app.core.domain.repository.AppTheme.LIGHT) Icons.Default.DarkMode else Icons.Default.LightMode,
+                    contentDescription = if (appearance == com.carmanager.app.core.domain.repository.AppTheme.LIGHT) "Passer en mode Nuit" else "Passer en mode Jour")
+            }
+        }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = { if (canShowAds) BannerAdSlot() },
         floatingActionButton = {
@@ -95,6 +113,7 @@ fun DashboardScreen(
                 onDocumentsClick = onDocumentsClick,
                 onNavigateToAdvice = onNavigateToAdvice,
                 onNavigateToMileageHistory = onNavigateToMileageHistory,
+                onNavigateToVehicles = onNavigateToVehicles,
                 onNavigateToStats = onNavigateToStats,
                 onNavigateToDeadlines = onNavigateToDeadlines,
                 mileageSaveEnabled = !viewModel.isUpdatingMileage,
@@ -117,71 +136,25 @@ private fun DashboardContent(
     onDocumentsClick: (Long) -> Unit,
     onNavigateToAdvice: (Long) -> Unit,
     onNavigateToMileageHistory: (Long) -> Unit,
+    onNavigateToVehicles: () -> Unit,
     onNavigateToStats: () -> Unit,
     onNavigateToDeadlines: () -> Unit,
     mileageSaveEnabled: Boolean,
     onMileageUpdate: (Vehicle, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val units = LocalAppUnits.current
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        verticalArrangement = Arrangement.spacedBy(CarManagerSpacing.medium),
         contentPadding = PaddingValues(start = 16.dp, top = CarManagerSpacing.firstContentTop, end = 16.dp, bottom = bottomContentPadding)
     ) {
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                shape = MaterialTheme.shapes.extraLarge
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    DashboardStatItem(
-                        label = "Véhicules",
-                        value = stats.vehicleCount.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    val totalExpenses = stats.monthlyFuelCost + stats.monthlyMaintenanceCost
-                    DashboardStatItem(
-                        label = "Budget",
-                        value = "%.0f".format(totalExpenses) + units.currency,
-                        modifier = Modifier.weight(1.1f),
-                        color = MaterialTheme.colorScheme.secondary,
-                        onClick = onNavigateToStats
-                    )
-
-                    DashboardStatItem(
-                        label = "Échéances",
-                        value = if (stats.upcomingDeadlines.isNotEmpty()) "${stats.upcomingDeadlines.size}" else "0",
-                        modifier = Modifier.weight(1.1f),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        onClick = onNavigateToDeadlines
-                    )
-                }
-            }
+            DashboardSummary(stats, onNavigateToVehicles, onNavigateToStats, onNavigateToDeadlines)
         }
-
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                HorizontalDivider(modifier = Modifier.padding(bottom = 16.dp).width(64.dp))
-                Text(
-                    text = "Mes Véhicules",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
-                )
+        if (stats.vehicles.isNotEmpty()) {
+            item {
+                Text("Suivi du garage", style = CarManagerTypography.cardTitle,
+                    color = MaterialTheme.colorScheme.onSurface)
             }
         }
 
@@ -222,7 +195,11 @@ private fun DashboardContent(
                 )
             }
         }
-        
+        if (stats.upcomingDeadlines.isNotEmpty()) {
+            item {
+                DashboardDeadlinesPreview(stats, onNavigateToDeadlines)
+            }
+        }
     }
 }
 
@@ -239,5 +216,79 @@ fun getMaintenanceTypeName(type: MaintenanceType): String {
         MaintenanceType.TECHNICAL_INSPECTION -> "Contrôle Technique"
         MaintenanceType.INSURANCE -> "Assurance"
         MaintenanceType.OTHER -> "Autre"
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DashboardSummary(stats: DashboardStats, onVehicles: () -> Unit, onStats: () -> Unit, onDeadlines: () -> Unit) {
+    val units = LocalAppUnits.current
+    val fontScale = LocalDensity.current.fontScale
+    val totalExpenses = stats.monthlyFuelCost + stats.monthlyMaintenanceCost
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth >= 288.dp * fontScale) 3 else 1
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(CarManagerSpacing.small),
+            verticalArrangement = Arrangement.spacedBy(CarManagerSpacing.small), maxItemsInEachRow = columns) {
+            DashboardStatItem(if (stats.vehicleCount == 1) "Véhicule" else stringResource(R.string.nav_vehicles),
+                stats.vehicleCount.toString(), Modifier.weight(1f), onClick = onVehicles)
+            DashboardStatItem("Ce mois-ci", "%.0f".format(totalExpenses) + units.currency,
+                Modifier.weight(1f), MaterialTheme.colorScheme.secondary, onStats)
+            DashboardStatItem("Échéances", stats.upcomingDeadlines.size.toString(),
+                Modifier.weight(1f), MaterialTheme.colorScheme.primary, onDeadlines)
+        }
+    }
+}
+
+/** Aperçu du résultat existant, sans nouvelle requête ni modification du calcul des échéances. */
+@Composable
+private fun DashboardDeadlinesPreview(stats: DashboardStats, onOpen: () -> Unit) {
+    val units = LocalAppUnits.current
+    val now = System.currentTimeMillis()
+    Card(shape = CarManagerShapes.card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(0.dp)) {
+        Column(Modifier.padding(CarManagerSpacing.medium)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = CarManagerDimensions.touchTarget)
+                .clickable(role = Role.Button, onClickLabel = "Ouvrir les échéances", onClick = onOpen),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("Échéances à suivre", style = CarManagerTypography.cardTitle, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+            stats.upcomingDeadlines.take(3).forEach { (vehicle, record) ->
+                val daysRemaining = record.nextDueDate?.let { TimeUnit.MILLISECONDS.toDays(it - now) }
+                val kmRemaining = record.nextDueMileage?.let { it - vehicle.currentMileage }
+                // Seuils visuels identiques à DeadlineItem : calcul métier et tri restent dans le use case.
+                val isUrgent = (daysRemaining != null && daysRemaining < 7) || (kmRemaining != null && kmRemaining < 500)
+                val isOverdue = (daysRemaining != null && daysRemaining < 0) || (kmRemaining != null && kmRemaining < 0)
+                val color = when {
+                    isOverdue -> MaterialTheme.colorScheme.error
+                    isUrgent -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(Modifier.fillMaxWidth().heightIn(min = CarManagerDimensions.touchTarget)
+                    .clickable(role = Role.Button, onClickLabel = "Ouvrir les échéances", onClick = onOpen)
+                    .padding(vertical = CarManagerSpacing.small),
+                    horizontalArrangement = Arrangement.spacedBy(CarManagerSpacing.small)) {
+                    Icon(Icons.Default.Event, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(getMaintenanceTypeName(record.type), style = CarManagerTypography.supporting)
+                        Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        record.nextDueDate?.let { Text(DateFormatter.formatShort(it), style = MaterialTheme.typography.labelSmall) }
+                        record.nextDueMileage?.let { Text("À $it ${units.distance}", style = MaterialTheme.typography.labelSmall) }
+                        Text(if (isOverdue) "Échéance dépassée" else if (isUrgent) "À prévoir" else "À venir",
+                            style = MaterialTheme.typography.labelSmall, color = color)
+                    }
+                }
+            }
+            if (stats.upcomingDeadlines.size > 3) {
+                TextButton(onClick = onOpen, modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget)) {
+                    Text("Toutes les échéances (${stats.upcomingDeadlines.size})")
+                }
+            }
+        }
     }
 }

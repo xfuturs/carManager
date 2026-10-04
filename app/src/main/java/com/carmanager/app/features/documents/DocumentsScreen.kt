@@ -1,6 +1,10 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.carmanager.app.features.documents
 
 import com.carmanager.app.core.ui.components.CarManagerBackAppBar
+import com.carmanager.app.core.ui.components.LocalDataContent
+import com.carmanager.app.core.ui.components.CompactEmptyState
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -9,11 +13,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,6 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -48,9 +58,10 @@ fun DocumentsScreen(
     onNavigateBack: () -> Unit,
     viewModel: DocumentsViewModel = hiltViewModel()
 ) {
-    val documents by viewModel.documents.collectAsState()
+    val state by viewModel.uiState.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val reportActions = reportUiActions(snackbarHostState)
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var selectedCategory by remember { mutableStateOf<DocumentCategory?>(null) }
@@ -110,45 +121,65 @@ fun DocumentsScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
+            if (selectedCategory != DocumentCategory.REPORTS) FloatingActionButton(
                 onClick = { pickerLauncher.launch("*/*") },
-                containerColor = VehicleColor,
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(Icons.Default.Add, contentDescription = "Importer un document")
             }
         }
     ) { padding ->
-        if (searchQuery.isNotEmpty()) {
-            // Vue recherche globale
-            DocumentGridView(
-                documents = documents,
-                onDelete = viewModel::deleteDocument,
-                onOpen = { if (viewModel.canOpen(it)) openFile(context, it) },
-                onConvertToPdf = viewModel::convertToPdf,
-                modifier = Modifier.padding(padding)
-            )
-        } else if (selectedCategory == null) {
-            FolderGridView(
-                documents = documents,
-                onCategoryClick = { selectedCategory = it },
-                modifier = Modifier.padding(padding)
-            )
-        } else {
-            val filteredDocs = documents.filter { it.category == selectedCategory }
-            DocumentGridView(
-                documents = filteredDocs,
-                onDelete = viewModel::deleteDocument,
-                onOpen = { if (viewModel.canOpen(it)) openFile(context, it) },
-                onConvertToPdf = viewModel::convertToPdf,
-                modifier = Modifier.padding(padding)
-            )
+        LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { documents ->
+            if (searchQuery.isNotEmpty()) {
+                // Vue recherche globale
+                DocumentGridView(
+                    documents = documents,
+                    isSearchResult = true,
+                    onDelete = viewModel::requestDeletion,
+                    onOpen = { if (it.category == DocumentCategory.REPORTS) reportActions.open(it) else if (viewModel.canOpen(it)) openFile(context, it) },
+                    onSave = reportActions.save,
+                    onShare = reportActions.share,
+                    onConvertToPdf = viewModel::convertToPdf,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (selectedCategory == null) {
+                FolderGridView(
+                    documents = documents,
+                    onCategoryClick = { selectedCategory = it },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                val filteredDocs = documents.filter { it.category == selectedCategory }
+                DocumentGridView(
+                    documents = filteredDocs,
+                    onDelete = viewModel::requestDeletion,
+                    onOpen = { if (it.category == DocumentCategory.REPORTS) reportActions.open(it) else if (viewModel.canOpen(it)) openFile(context, it) },
+                    onSave = reportActions.save,
+                    onShare = reportActions.share,
+                    isReportsFolder = selectedCategory == DocumentCategory.REPORTS,
+                    onConvertToPdf = viewModel::convertToPdf,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 
+    viewModel.pendingDeletion?.let { document ->
+        val report = document.category == DocumentCategory.REPORTS
+        AlertDialog(onDismissRequest = viewModel::cancelDeletion,
+            title = { Text(if (report) "Supprimer ce rapport ?" else "Supprimer ce document ?") },
+            text = { Text(if (report)
+                "Cette action supprimera définitivement le rapport enregistré dans Car Manager. Les copies que vous avez enregistrées ailleurs sur votre appareil ne seront pas supprimées."
+                else "Cette action supprimera définitivement la copie enregistrée dans Car Manager. Les originaux et copies enregistrés ailleurs ne seront pas supprimés.",
+                modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = viewModel::confirmDeletion, modifier = Modifier.heightIn(min = 48.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Supprimer définitivement") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelDeletion, modifier = Modifier.heightIn(min = 48.dp)) { Text("Annuler") } })
+    }
     if (showAddDialog && selectedUri != null) {
         AddDocumentDialog(
-            initialCategory = selectedCategory ?: DocumentCategory.PHOTOS,
+            initialCategory = selectedCategory?.takeUnless { it == DocumentCategory.REPORTS } ?: DocumentCategory.PHOTOS,
             onDismiss = { 
                 showAddDialog = false
                 selectedUri = null
@@ -207,78 +238,55 @@ private fun FolderGridView(
     onCategoryClick: (DocumentCategory) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val categories = DocumentCategory.entries
+    val categories = ordinaryDocumentCategories
+    val summary = ReportSummary.from(documents)
     
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier.fillMaxSize()
-    ) {
-        items(categories) { category ->
-            val count = documents.count { it.category == category }
-            FolderItem(
-                category = category,
-                count = count,
-                onClick = { onCategoryClick(category) }
-            )
+    val fontScale = LocalDensity.current.fontScale
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val columns = if (maxWidth >= 320.dp * fontScale && fontScale <= 1.3f) 2 else 1
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 88.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item(key = "car_manager_reports", span = { GridItemSpan(maxLineSpan) }) {
+                Card(onClick = { onCategoryClick(DocumentCategory.REPORTS) }, modifier = Modifier.fillMaxWidth(),
+                    shape = CarManagerShapes.card, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                    Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Default.PictureAsPdf, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(stringResource(R.string.docs_category_reports), fontWeight = FontWeight.SemiBold)
+                            Text(if (summary.count == 0) "Aucun rapport enregistré." else "${summary.count} rapport(s) enregistré(s).",
+                                style = MaterialTheme.typography.bodySmall)
+                            summary.latest?.let { Text("Dernier rapport : ${reportDate(it)}", style = MaterialTheme.typography.labelSmall) }
+                            Text(if (summary.count == 0) "Les rapports générés pour ce véhicule apparaîtront ici." else "Rapports PDF générés par l’application",
+                                style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+            items(categories, key = { it.name }) { category ->
+                FolderItem(category, documents.count { it.category == category }) { onCategoryClick(category) }
+            }
         }
     }
 }
 
 @Composable
-private fun FolderItem(
-    category: DocumentCategory,
-    count: Int,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(140.dp)
-            .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+private fun FolderItem(category: DocumentCategory, count: Int, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        shape = CarManagerShapes.card,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            val icon = getCategoryIcon(category)
-            val color = getCategoryColor(category)
-            
-            Surface(
-                color = color.copy(alpha = 0.1f),
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = color,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = getCategoryName(category),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            
-            Text(
-                text = "$count document(s)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(getCategoryIcon(category), contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+            Text(getCategoryName(category), style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold)
+            Text("$count " + if (count == 1) "document" else "documents",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -289,31 +297,35 @@ private fun DocumentGridView(
     onDelete: (Document) -> Unit,
     onOpen: (Document) -> Unit,
     onConvertToPdf: (Document) -> Unit,
-    modifier: Modifier = Modifier
+    onSave: (Document) -> Unit,
+    onShare: (Document) -> Unit,
+    modifier: Modifier = Modifier,
+    isSearchResult: Boolean = false,
+    isReportsFolder: Boolean = false
 ) {
     if (documents.isEmpty()) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
-                Spacer(Modifier.height(16.dp))
-                Text("Dossier vide", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            CompactEmptyState(Icons.Default.FolderOpen,
+                if (isSearchResult) "Aucun résultat" else if (isReportsFolder) "Aucun rapport enregistré." else "Aucun document dans ce dossier",
+                if (isSearchResult) "Essayez un autre titre de document." else if (isReportsFolder) "Les rapports générés pour ce véhicule apparaîtront ici." else "Utilisez + pour importer un document ou une photo.")
         }
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = modifier.fillMaxSize()
-        ) {
-            items(documents, key = { it.id }) { doc ->
-                DocumentItem(
-                    document = doc,
-                    onDelete = { onDelete(doc) },
-                    onOpen = { onOpen(doc) },
-                    onConvertToPdf = { onConvertToPdf(doc) }
-                )
+        val fontScale = LocalDensity.current.fontScale
+        BoxWithConstraints(modifier.fillMaxSize()) {
+            val columns = if (!isReportsFolder && maxWidth >= 320.dp * fontScale && fontScale <= 1.3f) 2 else 1
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 88.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(documents, key = { it.id }, span = { doc ->
+                    GridItemSpan(if (doc.category == DocumentCategory.REPORTS) maxLineSpan else 1)
+                }) { doc ->
+                    if (doc.category == DocumentCategory.REPORTS)
+                        ReportCard(doc, { onDelete(doc) }, { onOpen(doc) }, { onSave(doc) }, { onShare(doc) })
+                    else DocumentItem(doc, { onDelete(doc) }, { onOpen(doc) }, { onConvertToPdf(doc) }, { onSave(doc) }, { onShare(doc) })
+                }
             }
         }
     }
@@ -330,6 +342,7 @@ private fun getCategoryName(category: DocumentCategory): String {
         DocumentCategory.PHOTOS -> stringResource(R.string.docs_category_photos)
         DocumentCategory.CLAIMS -> stringResource(R.string.docs_category_claims)
         DocumentCategory.OTHER -> stringResource(R.string.docs_category_other)
+        DocumentCategory.REPORTS -> stringResource(R.string.docs_category_reports)
     }
 }
 
@@ -343,21 +356,7 @@ private fun getCategoryIcon(category: DocumentCategory): ImageVector {
         DocumentCategory.PHOTOS -> Icons.Default.CameraAlt
         DocumentCategory.CLAIMS -> Icons.Default.ReportProblem
         DocumentCategory.OTHER -> Icons.Default.Category
-    }
-}
-
-@Composable
-private fun getCategoryColor(category: DocumentCategory): Color {
-    val isDark = isSystemInDarkTheme()
-    return when(category) {
-        DocumentCategory.ADMINISTRATIVE -> if (isDark) AdminColorDark else AdminColor
-        DocumentCategory.INSURANCE -> SuccessGreen
-        DocumentCategory.TECHNICAL_INSPECTION -> if (isDark) MaintenanceColorDark else MaintenanceColor
-        DocumentCategory.MAINTENANCE -> if (isDark) MaintenanceColorDark else MaintenanceColor
-        DocumentCategory.FUEL -> if (isDark) FuelColorDark else FuelColor
-        DocumentCategory.PHOTOS -> if (isDark) VehicleColorDark else VehicleColor
-        DocumentCategory.CLAIMS -> ErrorRed
-        DocumentCategory.OTHER -> Color.Gray
+        DocumentCategory.REPORTS -> Icons.Default.PictureAsPdf
     }
 }
 
@@ -395,86 +394,48 @@ private fun DocumentItem(
     document: Document,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
-    onConvertToPdf: () -> Unit
+    onConvertToPdf: () -> Unit,
+    onSave: () -> Unit,
+    onShare: () -> Unit
 ) {
     val isPdf = document.filePath.endsWith(".pdf", true)
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.8f)
-            .clickable { onOpen() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column {
-            Box(modifier = Modifier.weight(1f)) {
-                if (isPdf) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = AdminColor
-                        )
-                        Text(
-                            text = "PDF",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
-                            fontWeight = FontWeight.Bold,
-                            color = AdminColor
-                        )
-                    }
-                } else {
-                    AsyncImage(
-                        model = File(document.filePath),
-                        contentDescription = document.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-                
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            MaterialTheme.shapes.small
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (!isPdf) {
-                        IconButton(onClick = onConvertToPdf) {
-                            Icon(
-                                imageVector = Icons.Default.PictureAsPdf,
-                                contentDescription = stringResource(R.string.docs_convert_pdf),
-                                tint = AdminColor,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.docs_delete),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth(),
+        shape = CarManagerShapes.card,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        if (isPdf) {
+            Column(Modifier.fillMaxWidth().heightIn(min = 96.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Description, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("PDF", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(document.title, style = MaterialTheme.typography.labelLarge, maxLines = 1, textAlign = TextAlign.Center)
-                Text(
-                    DateFormatter.formatShort(document.date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+        } else {
+            AsyncImage(model = File(document.filePath), contentDescription = document.title,
+                modifier = Modifier.fillMaxWidth().height(120.dp), contentScale = ContentScale.Crop)
+        }
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(document.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(DateFormatter.formatShort(document.date), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (document.category == DocumentCategory.REPORTS) {
+                    TextButton(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp)) { Text("Ouvrir") }
+                    TextButton(onClick = onSave, modifier = Modifier.heightIn(min = 48.dp)) { Text("Enregistrer une copie") }
+                    TextButton(onClick = onShare, modifier = Modifier.heightIn(min = 48.dp)) { Text("Partager") }
+                }
+                if (!isPdf) {
+                    IconButton(onClick = onConvertToPdf, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                        Icon(Icons.Default.PictureAsPdf, stringResource(R.string.docs_convert_pdf),
+                            Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
+                    Icon(Icons.Default.Delete, stringResource(R.string.docs_delete),
+                        Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }
@@ -495,25 +456,29 @@ private fun AddDocumentDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text(stringResource(R.string.docs_label_title)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium
                 )
                 
                 Text(stringResource(R.string.docs_label_category), style = MaterialTheme.typography.labelLarge)
-                Column {
-                    DocumentCategory.entries.forEach { category ->
+                Column(Modifier.selectableGroup()) {
+                    DocumentCategory.entries.filterNot { it == DocumentCategory.REPORTS }.forEach { category ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().clickable { selectedCategory = category }
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                                selected = selectedCategory == category, role = Role.RadioButton,
+                                onClick = { selectedCategory = category })
                         ) {
                             RadioButton(
                                 selected = selectedCategory == category,
-                                onClick = { selectedCategory = category }
+                                onClick = null
                             )
                             Text(getCategoryName(category))
                         }

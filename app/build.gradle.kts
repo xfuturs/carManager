@@ -17,7 +17,8 @@ val adMobProperties = Properties().apply {
 }
 val productionAdMobAppId = adMobProperties.getProperty("ADMOB_APP_ID")
 val productionBannerId = adMobProperties.getProperty("ADMOB_BANNER_AD_UNIT_ID")
-val productionAdMobErrors = AdMobConfiguration.releaseErrors(productionAdMobAppId, productionBannerId)
+val productionInterstitialId = adMobProperties.getProperty("ADMOB_INTERSTITIAL_AD_UNIT_ID")
+val productionAdMobErrors = AdMobConfiguration.releaseErrors(productionAdMobAppId, productionBannerId, productionInterstitialId)
 
 val validateReleaseAdsConfiguration = tasks.register("validateReleaseAdsConfiguration") {
     group = "verification"
@@ -60,12 +61,14 @@ android {
         debug {
             manifestPlaceholders["ADMOB_APP_ID"] = AdMobConfiguration.DEBUG_APP_ID
             buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"${AdMobConfiguration.DEBUG_BANNER_ID}\"")
+            buildConfigField("String", "ADMOB_INTERSTITIAL_AD_UNIT_ID", "\"${AdMobConfiguration.DEBUG_INTERSTITIAL_ID}\"")
         }
         release {
             // Sans valeurs valides, aucune valeur vide/factice/demo n'est injectee dans un manifeste.
             if (productionAdMobErrors.isEmpty()) {
                 manifestPlaceholders["ADMOB_APP_ID"] = productionAdMobAppId!!
                 buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"${productionBannerId!!}\"")
+                buildConfigField("String", "ADMOB_INTERSTITIAL_AD_UNIT_ID", "\"${productionInterstitialId!!}\"")
             }
             isMinifyEnabled = false
             proguardFiles(

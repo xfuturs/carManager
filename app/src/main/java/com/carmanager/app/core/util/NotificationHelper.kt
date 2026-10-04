@@ -27,24 +27,28 @@ object NotificationHelper {
         }
     }
 
-    private fun reminderUri(owner: String, id: Long): Uri = Uri.Builder().scheme("carmanager")
-        .authority("maintenance").appendPath(id.toString()).appendQueryParameter("owner", owner).build()
+    private fun reminderUri(owner: String, id: Long, leadDays: Int?): Uri = Uri.Builder().scheme("carmanager")
+        .authority("maintenance").appendPath(id.toString()).appendQueryParameter("owner", owner)
+        .apply { leadDays?.let { appendQueryParameter("leadDays", it.toString()) } }.build()
 
-    private fun reminderIntent(context: Context, owner: String, id: Long) = Intent(context, ReminderReceiver::class.java).apply {
-        data = reminderUri(owner, id)
+    private fun reminderIntent(context: Context, owner: String, id: Long, leadDays: Int?) = Intent(context, ReminderReceiver::class.java).apply {
+        data = reminderUri(owner, id, leadDays)
         putExtra("ownerKey", owner)
         putExtra("recordId", id)
     }
 
-    fun cancelOwnedReminder(context: Context, owner: String, id: Long) {
-        val pending = PendingIntent.getBroadcast(context, 0, reminderIntent(context, owner, id),
+    fun cancelOwnedReminder(context: Context, owner: String, id: Long, leadDays: Int? = null) {
+        val pending = PendingIntent.getBroadcast(context, 0, reminderIntent(context, owner, id, leadDays),
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
         if (pending != null) {
             (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pending)
             pending.cancel()
         }
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .cancel(reminderUri(owner, id).toString(), id.hashCode())
+            .cancel(reminderUri(owner, id, leadDays).toString(), id.hashCode())
+        // Ancienne livraison sans URI/propriétaire, utilisée avant A14.
+        if (leadDays == null && owner == com.carmanager.app.core.domain.session.WorkspaceOwner.GUEST)
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel("legacy_guest", id.hashCode())
     }
 
     fun clearInactiveNotifications(context: Context, owner: String) {
@@ -56,15 +60,18 @@ object NotificationHelper {
         }
     }
 
-    fun scheduleReminder(context: Context, timeInMillis: Long, title: String, message: String, owner: String, recordId: Long) {
-        val intent = reminderIntent(context, owner, recordId).apply {
+    fun scheduleReminder(context: Context, timeInMillis: Long, title: String, message: String, owner: String, recordId: Long,
+        dueAt: Long? = null, leadDays: Int? = null) {
+        val intent = reminderIntent(context, owner, recordId, leadDays).apply {
             putExtra("title", title)
             putExtra("message", message)
+            dueAt?.let { putExtra("dueAt", it) }
+            leadDays?.let { putExtra("leadDays", it) }
         }
 
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            0, // L'URI encode propriétaire + identifiant, même si deux rappels partagent la date.
+            0, // L'URI encode propriétaire + identifiant + avance ; les extras ne font pas l'identité.
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -72,13 +79,14 @@ object NotificationHelper {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    timeInMillis,
-                    pendingIntent
-                )
-            } else {
+            try {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeInMillis, pendingIntent)
+                } else {
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, timeInMillis, pendingIntent)
+                }
+            } catch (_: SecurityException) {
+                // L’autorisation exacte peut être retirée entre sa lecture et la programmation.
                 alarmManager.set(
                     AlarmManager.RTC_WAKEUP,
                     timeInMillis,

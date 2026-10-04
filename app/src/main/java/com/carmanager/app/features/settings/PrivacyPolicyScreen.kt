@@ -1,15 +1,13 @@
 package com.carmanager.app.features.settings
 
 import com.carmanager.app.core.ui.components.CarManagerBackAppBar
+import com.carmanager.app.core.ui.components.SecondarySectionTitle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -28,15 +26,11 @@ fun PrivacyPolicyScreen(onNavigateBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Politique de Confidentialité - Car Manager",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
+            SecondarySectionTitle("Politique de Confidentialité - Car Manager")
 
             Text(
                 text = "Dernière mise à jour : 30 septembre 2026",
@@ -69,21 +63,19 @@ fun PrivacyPolicyScreen(onNavigateBack: () -> Unit) {
                 content = "La suppression depuis les paramètres vise les anciennes données envoyées dans les collections Firestore connues du compte, ses données et documents sur cette installation, ses rappels identifiables, puis son compte Firebase. Une erreur est signalée et peut laisser une suppression partielle. Les données invitées et celles des autres comptes restent conservées. Les exports partagés et les données conservées sur d'autres appareils ne sont pas effacés par cette action."
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
 @Composable
 private fun PrivacySection(title: String, content: String) {
-    Column {
-        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SecondarySectionTitle(title)
         Text(
             text = content,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 20.sp
+            lineHeight = 24.sp
         )
     }
 }

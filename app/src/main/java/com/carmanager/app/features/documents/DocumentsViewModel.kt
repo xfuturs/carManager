@@ -3,10 +3,14 @@ package com.carmanager.app.features.documents
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.carmanager.app.core.domain.model.Document
 import com.carmanager.app.core.domain.model.DocumentCategory
+import com.carmanager.app.core.domain.model.LocalDataState
+import com.carmanager.app.core.domain.session.observeLocalState
 import com.carmanager.app.core.domain.repository.DocumentRepository
 import com.carmanager.app.core.util.FileStorageHelper
 import com.carmanager.app.core.util.UiEvent
@@ -38,15 +42,14 @@ class DocumentsViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
-    private val _rawDocuments = documentRepository.observeByVehicle(vehicleId)
-    
-    val documents = combine(_rawDocuments, _searchQuery) { docs, query ->
-        if (query.isBlank()) {
-            docs
-        } else {
-            docs.filter { it.title.contains(query, ignoreCase = true) }
+    private val retry = MutableStateFlow(0)
+    val uiState: StateFlow<LocalDataState<List<Document>>> = observeLocalState(session, retry) {
+        combine(documentRepository.observeByVehicle(vehicleId), _searchQuery) { docs, query ->
+            if (query.isBlank()) docs else docs.filter { it.title.contains(query, ignoreCase = true) }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000, replayExpirationMillis = 0), LocalDataState.Loading)
+
+    fun retryLoading() { retry.value++ }
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
@@ -57,11 +60,24 @@ class DocumentsViewModel @Inject constructor(
         check(document.ownerKey == workspaceOwner && document.vehicleId == vehicleId)
     }.isSuccess
 
+    var pendingDeletion by androidx.compose.runtime.mutableStateOf<Document?>(null)
+        private set
+    fun requestDeletion(document: Document) {
+        if (canOpen(document)) pendingDeletion = document
+    }
+    fun cancelDeletion() { pendingDeletion = null }
+    fun confirmDeletion() {
+        val document = pendingDeletion ?: return
+        pendingDeletion = null
+        deleteDocument(document)
+    }
+
     fun addDocument(uri: Uri, title: String, category: DocumentCategory) {
         viewModelScope.launch {
             var createdFile: String? = null
             var committed = false
             try {
+                require(category != DocumentCategory.REPORTS) { "Les rapports Car Manager sont créés depuis Statistiques." }
                 access.write(workspaceOwner, vehicleId) {
                     val path = FileStorageHelper.saveFileToInternalStorage(context, uri)
                         ?: error("Erreur lors de la sauvegarde du fichier")

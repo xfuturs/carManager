@@ -1,7 +1,6 @@
 package com.carmanager.app.core.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -9,13 +8,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import com.carmanager.app.core.domain.model.FuelType
 import com.carmanager.app.core.domain.model.Vehicle
-import com.carmanager.app.core.domain.model.VehicleType
-import com.carmanager.app.core.ui.theme.LocalAppUnits
+import com.carmanager.app.core.ui.theme.*
+import java.text.NumberFormat
+import java.util.Locale
+import androidx.compose.ui.unit.dp
 
 @Composable
 fun VehicleItem(
@@ -28,75 +27,52 @@ fun VehicleItem(
     modifier: Modifier = Modifier
 ) {
     val units = LocalAppUnits.current
-    var showDeleteDialog by remember { mutableStateOf(false) }
-
+    var showDeleteDialog by remember(vehicle.id) { mutableStateOf(false) }
+    var showActions by remember(vehicle.id) { mutableStateOf(false) }
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = modifier.fillMaxWidth(), shape = CarManagerShapes.card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            val vehicleIcon = when (vehicle.type) {
-                VehicleType.CAR -> Icons.Default.DirectionsCar
-                VehicleType.MOTORCYCLE -> Icons.Default.TwoWheeler
-                VehicleType.UTILITY -> Icons.Default.LocalShipping
+        Row(Modifier.fillMaxWidth().padding(CarManagerSpacing.extraSmall), verticalAlignment = Alignment.Top) {
+            // La zone d'ouverture et le menu sont frères : aucune cible interactive imbriquée.
+            Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.weight(1f).heightIn(min = CarManagerDimensions.touchTarget),
+                shape = CarManagerShapes.control) {
+                Column(Modifier.padding(CarManagerSpacing.small),
+                    verticalArrangement = Arrangement.spacedBy(CarManagerSpacing.extraSmall)) {
+                    VehicleIdentity(vehicle, Modifier.fillMaxWidth())
+                    Text("${NumberFormat.getIntegerInstance(Locale.FRANCE).format(vehicle.currentMileage)} ${units.distance}",
+                        style = CarManagerTypography.cardTitle, color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Ouvrir le suivi", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            Icon(
-                imageVector = vehicleIcon,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = "${vehicle.brand} ${vehicle.model}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = "${vehicle.year} • ${vehicle.licensePlate ?: ""}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-            
-            Row(
-                modifier = Modifier.padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                InfoChip(icon = Icons.Default.Speed, text = "${vehicle.currentMileage} ${units.distance}")
-                Spacer(modifier = Modifier.width(16.dp))
-                InfoChip(icon = Icons.Default.EvStation, text = vehicle.fuelType.name)
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp).width(32.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                IconButton(onClick = onFuelClick) {
-                    Icon(imageVector = Icons.Default.EvStation, contentDescription = "Fuel", tint = MaterialTheme.colorScheme.primary)
+            Box {
+                IconButton(onClick = { showActions = true }, modifier = Modifier.sizeIn(
+                    minWidth = CarManagerDimensions.touchTarget, minHeight = CarManagerDimensions.touchTarget)) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Actions pour ${vehicle.brand} ${vehicle.model}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = onMaintenanceClick) {
-                    Icon(imageVector = Icons.Default.Build, contentDescription = "Maintenance", tint = MaterialTheme.colorScheme.secondary)
-                }
-                IconButton(onClick = onEdit) {
-                    Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.outline)
-                }
-                IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                DropdownMenu(expanded = showActions, onDismissRequest = { showActions = false }) {
+                    DropdownMenuItem(text = { Text(if (vehicle.fuelType == FuelType.ELECTRIC) "Recharge" else "Carburant") },
+                        leadingIcon = { Icon(Icons.Default.EvStation, contentDescription = null) },
+                        modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget),
+                        onClick = { showActions = false; onFuelClick() })
+                    DropdownMenuItem(text = { Text("Entretien") },
+                        leadingIcon = { Icon(Icons.Default.Build, contentDescription = null) },
+                        modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget),
+                        onClick = { showActions = false; onMaintenanceClick() })
+                    DropdownMenuItem(text = { Text("Modifier") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget),
+                        onClick = { showActions = false; onEdit() })
+                    DropdownMenuItem(text = { Text("Supprimer", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget),
+                        onClick = { showActions = false; showDeleteDialog = true })
                 }
             }
         }
@@ -123,25 +99,6 @@ fun VehicleItem(
                     Text("Annuler")
                 }
             }
-        )
-    }
-}
-
-@Composable
-private fun InfoChip(icon: ImageVector, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
         )
     }
 }

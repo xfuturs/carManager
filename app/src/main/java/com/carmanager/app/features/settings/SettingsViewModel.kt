@@ -15,22 +15,53 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class SettingsViewModel @Inject constructor(
+class SettingsViewModel internal constructor(
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
     private val premiumRepository: PremiumRepository,
     private val deletion: com.carmanager.app.core.domain.session.AccountDeletion,
     session: com.carmanager.app.core.domain.session.WorkspaceSession,
-    registry: com.carmanager.app.core.domain.session.DeletionRegistry
+    registry: com.carmanager.app.core.domain.session.DeletionRegistry,
+    private val reminders: com.carmanager.app.core.data.repository.ReminderSettingsStore? = null
 ) : ViewModel() {
+    @Inject constructor(reminders: com.carmanager.app.core.data.repository.ReminderSettingsStore,
+        settings: SettingsRepository, auth: AuthRepository, premium: PremiumRepository,
+        deletion: com.carmanager.app.core.domain.session.AccountDeletion,
+        session: com.carmanager.app.core.domain.session.WorkspaceSession, registry: com.carmanager.app.core.domain.session.DeletionRegistry)
+        : this(settings, auth, premium, deletion, session, registry, reminders)
 
     val themePreference: StateFlow<AppTheme> = settingsRepository.themePreference
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.SYSTEM)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.LIGHT)
+
+    private val _preferenceEvents = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.BUFFERED)
+    val preferenceEvents = _preferenceEvents.receiveAsFlow()
+    val reminderPreferences = (reminders?.preferences ?: kotlinx.coroutines.flow.flowOf(com.carmanager.app.core.domain.model.ReminderPreferences()))
+        .map<com.carmanager.app.core.domain.model.ReminderPreferences, com.carmanager.app.core.domain.model.ReminderPreferences?> { it }
+        .catch { error ->
+            if (error is CancellationException) throw error
+            _preferenceEvents.send("Réglages des rappels indisponibles. Rouvrez les paramètres.")
+            emit(null)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    fun setRemindersEnabled(enabled: Boolean) = updateReminders { it.copy(enabled = enabled) }
+    fun setReminderCategory(category: com.carmanager.app.core.domain.model.ReminderCategory, enabled: Boolean) = updateReminders { it.withCategory(category, enabled) }
+    fun setReminderLead(days: Int) = updateReminders { it.toggleLead(days) }
+    private fun updateReminders(change: (com.carmanager.app.core.domain.model.ReminderPreferences) -> com.carmanager.app.core.domain.model.ReminderPreferences) {
+        viewModelScope.launch {
+            try { checkNotNull(reminders).update(change) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _preferenceEvents.send("Réglage du rappel non enregistré. Réessayez.")
+            }
+        }
+    }
 
     val currency: StateFlow<String> = settingsRepository.currency
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "€")
@@ -76,8 +107,13 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setTheme(theme: AppTheme) {
+        if (theme == AppTheme.SYSTEM) return
         viewModelScope.launch {
-            settingsRepository.setThemePreference(theme)
+            try { settingsRepository.setThemePreference(theme) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _preferenceEvents.send("Apparence non enregistrée. Réessayez.")
+            }
         }
     }
 

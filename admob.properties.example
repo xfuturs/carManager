@@ -1,5 +1,6 @@
 # Copier dans admob.properties a la racine du projet (fichier ignore par Git).
-# Renseigner uniquement les valeurs de votre application et unite banniere AdMob.
+# Renseigner les valeurs de votre application, banniere et interstitiel AdMob.
 # Aucune valeur d'exemple de production ni fallback n'est fourni.
 ADMOB_APP_ID=
 ADMOB_BANNER_AD_UNIT_ID=
+ADMOB_INTERSTITIAL_AD_UNIT_ID=

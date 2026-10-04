@@ -1,6 +1,9 @@
 package com.carmanager.app.features.fuel
 
-import com.carmanager.app.core.ui.components.CarManagerBackAppBar
+import com.carmanager.app.core.ui.components.*
+import com.carmanager.app.core.ui.theme.CarManagerShapes
+import com.carmanager.app.core.ui.theme.CarManagerDimensions
+import com.carmanager.app.core.ui.theme.CarManagerSpacing
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,9 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material3.*
@@ -19,20 +20,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.R
 import com.carmanager.app.core.domain.model.FuelType
-import com.carmanager.app.core.ui.components.DatePickerField
-import com.carmanager.app.core.ui.components.MileageSuggestions
-import com.carmanager.app.core.ui.theme.FuelColor
 import com.carmanager.app.core.ui.theme.LocalAppUnits
-import com.carmanager.app.core.ui.theme.SuccessGreen
 import com.carmanager.app.core.util.UiEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,115 +73,102 @@ fun AddFuelScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Sélecteur pour Hybride
+        FormScreenContent(padding) {
             if (viewModel.fuelType == FuelType.HYBRID) {
-                EnergyTypeSelector(
-                    isElectric = viewModel.isElectricEntry,
-                    onToggle = viewModel::onElectricEntryToggle
-                )
-            }
-
-            // Bouton de Scan IA
-            OutlinedButton(
-                onClick = { pickerLauncher.launch("image/*") },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = FuelColor)
-            ) {
-                if (viewModel.isScanning) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = FuelColor)
-                } else {
-                    Icon(Icons.Default.DocumentScanner, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (viewModel.isElectricEntry) "Scanner facture borne (IA)" else stringResource(R.string.ocr_scan_fuel))
+                FormSection("Énergie") {
+                    EnergyTypeSelector(
+                        isElectric = viewModel.isElectricEntry,
+                        onToggle = viewModel::onElectricEntryToggle
+                    )
                 }
             }
-
-            DatePickerField(
-                label = if (viewModel.isElectricEntry) "Date de la recharge" else stringResource(R.string.fuel_date),
-                selectedDate = viewModel.date,
-                onDateSelected = viewModel::onDateChange
-            )
-
-            OutlinedTextField(
-                value = viewModel.mileage,
-                onValueChange = viewModel::onMileageChange,
-                label = { Text(stringResource(R.string.vehicle_mileage)) },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                placeholder = { Text("Dernier : ${viewModel.currentVehicleMileage} ${units.distance}") }
-            )
-
-            MileageSuggestions(
-                onIncrementSelect = viewModel::onEstimatedMileageSelect
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            FormSection("Kilométrage") {
                 OutlinedTextField(
-                    value = viewModel.liters,
-                    onValueChange = viewModel::onLitersChange,
-                    label = { Text(if (viewModel.isElectricEntry) "kWh *" else stringResource(R.string.fuel_liters) + " *") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    value = viewModel.mileage,
+                    onValueChange = viewModel::onMileageChange,
+                    label = { Text(stringResource(R.string.vehicle_mileage)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    isError = viewModel.showErrors && viewModel.liters.isBlank()
+                    placeholder = { Text("Dernier : ${viewModel.currentVehicleMileage} ${units.distance}") }
                 )
-                OutlinedTextField(
-                    value = viewModel.totalPrice,
-                    onValueChange = viewModel::onTotalPriceChange,
-                    label = { Text(stringResource(R.string.fuel_total_price) + " (${units.currency}) *") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = viewModel.showErrors && viewModel.totalPrice.isBlank()
+                MileageSuggestions(
+                    onIncrementSelect = viewModel::onEstimatedMileageSelect
                 )
             }
-
-            // Suggestions adaptatives
-            val capacity = if (viewModel.isElectricEntry) viewModel.batteryCapacity else viewModel.tankCapacity
-            capacity?.let { cap ->
-                EnergySuggestions(
-                    capacity = cap,
-                    isElectric = viewModel.isElectricEntry,
-                    onSelect = viewModel::onLitersChange
-                )
+            FormSection("Quantité et coût") {
+                FormFieldPair(first = {
+                        OutlinedTextField(
+                            shape = CarManagerShapes.control,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            value = viewModel.liters,
+                            onValueChange = viewModel::onLitersChange,
+                            label = { Text(if (viewModel.isElectricEntry) "kWh *" else stringResource(R.string.fuel_liters) + " *") },
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            isError = viewModel.showErrors && viewModel.liters.isBlank()
+                        )
+                    }, second = {
+                        OutlinedTextField(
+                            shape = CarManagerShapes.control,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            value = viewModel.totalPrice,
+                            onValueChange = viewModel::onTotalPriceChange,
+                            label = { Text(stringResource(R.string.fuel_total_price) + " (${units.currency}) *") },
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            isError = viewModel.showErrors && viewModel.totalPrice.isBlank()
+                        )
+                })
+                val capacity = if (viewModel.isElectricEntry) viewModel.batteryCapacity else viewModel.tankCapacity
+                capacity?.let { cap ->
+                    EnergySuggestions(
+                        capacity = cap,
+                        isElectric = viewModel.isElectricEntry,
+                        onSelect = viewModel::onLitersChange
+                    )
+                }
             }
+            FormSection("Date et détails") {
+                DatePickerField(
+                    label = if (viewModel.isElectricEntry) "Date de la recharge" else stringResource(R.string.fuel_date),
+                    selectedDate = viewModel.date,
+                    onDateSelected = viewModel::onDateChange
+                )
+                OutlinedTextField(
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    value = viewModel.note,
+                    onValueChange = viewModel::onNoteChange,
+                    label = { Text(stringResource(R.string.fuel_note)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                OutlinedButton(
+                    onClick = { pickerLauncher.launch("image/*") },
+                    shape = CarManagerShapes.control,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = CarManagerDimensions.touchTarget),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                ) {
+                    if (viewModel.isScanning) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Icon(Icons.Default.DocumentScanner, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.ocr_scan_fuel), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
 
-            OutlinedTextField(
-                value = viewModel.note,
-                onValueChange = viewModel::onNoteChange,
-                label = { Text(stringResource(R.string.fuel_note)) },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-
-            Button(
-                onClick = { viewModel.save() },
+            }
+            FormSaveAction(stringResource(R.string.save),
                 enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp)
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SuccessGreen,
-                    contentColor = Color.White
-                ),
-                shape = MaterialTheme.shapes.large
-            ) {
-                Text(
-                    text = stringResource(R.string.save),
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
+                onClick = { viewModel.save() })
         }
+
     }
 }
 
@@ -196,13 +178,13 @@ fun EnergyTypeSelector(
     onToggle: (Boolean) -> Unit
 ) {
     TabRow(selectedTabIndex = if (isElectric) 1 else 0) {
-        Tab(selected = !isElectric, onClick = { onToggle(false) }) {
+        Tab(modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget), selected = !isElectric, onClick = { onToggle(false) }) {
             @Suppress("DEPRECATION")
-            Text("Essence / Gazoil", modifier = Modifier.padding(16.dp))
+            Text("Carburant", modifier = Modifier.padding(8.dp))
         }
-        Tab(selected = isElectric, onClick = { onToggle(true) }) {
+        Tab(modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget), selected = isElectric, onClick = { onToggle(true) }) {
             @Suppress("DEPRECATION")
-            Text("Électricité", modifier = Modifier.padding(16.dp))
+            Text("Électricité", modifier = Modifier.padding(8.dp))
         }
     }
 }
@@ -214,23 +196,24 @@ private fun EnergySuggestions(capacity: Double, isElectric: Boolean, onSelect: (
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Volume ($unit) - Capacité: ${capacity}$unit",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Start
         )
         Spacer(modifier = Modifier.height(4.dp))
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
             listOf(0.25, 0.4, 0.5, 0.6, 0.75, 0.8, 0.9, 1.0).forEach { ratio ->
                 val amount = (capacity * ratio).toInt()
                 SuggestionChip(
+                    modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget),
+                    shape = CarManagerShapes.control,
                     onClick = { onSelect(amount.toString()) },
                     label = { Text("${amount}$unit") }
                 )

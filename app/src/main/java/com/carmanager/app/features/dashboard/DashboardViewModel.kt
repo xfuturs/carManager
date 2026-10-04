@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.emitAll
 import android.util.Log
 import javax.inject.Inject
+import com.carmanager.app.core.domain.model.ReportSection
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -34,7 +35,7 @@ class DashboardViewModel @Inject constructor(
     private val updateMileageUseCase: UpdateMileageUseCase,
     private val settingsRepository: SettingsRepository,
     private val premiumRepository: PremiumRepository,
-    private val generateVehicleReportUseCase: GenerateVehicleReportUseCase
+    private val storeVehicleReportUseCase: StoreVehicleReportUseCase
 ) : ViewModel() {
 
     private val retry = MutableStateFlow(0)
@@ -47,6 +48,15 @@ class DashboardViewModel @Inject constructor(
             initialValue = LocalDataState.Loading
         )
     fun retryLoading() { retry.value++ }
+    fun toggleAppearance() {
+        viewModelScope.launch {
+            try { settingsRepository.toggleTheme() }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar("Apparence non enregistrée. Réessayez."))
+            }
+        }
+    }
 
     val currency: StateFlow<String> = settingsRepository.currency
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "€")
@@ -60,6 +70,36 @@ class DashboardViewModel @Inject constructor(
         private set
     private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
+
+    private val _generatedReport = MutableStateFlow<com.carmanager.app.core.domain.model.Document?>(null)
+    val generatedReport: StateFlow<com.carmanager.app.core.domain.model.Document?> = _generatedReport
+    var isGeneratingReport by mutableStateOf(false)
+        private set
+    fun closeReportResult() { _generatedReport.value = null }
+    private val _reportDraft = MutableStateFlow<ReportDraft?>(null)
+    val reportDraft: StateFlow<ReportDraft?> = _reportDraft
+    var isPreparingReport by mutableStateOf(false)
+        private set
+    fun prepareReport(vehicleId: Long) {
+        if (isPreparingReport || isGeneratingReport || _reportDraft.value != null) return
+        isPreparingReport = true
+        viewModelScope.launch {
+            try {
+                val previous = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { storeVehicleReportUseCase.previousReports(vehicleId) }
+                _reportDraft.value = ReportDraft(vehicleId, previous)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar("Configuration du rapport indisponible. Réessayez."))
+            } finally { isPreparingReport = false }
+        }
+    }
+    fun cancelReportDraft() { _reportDraft.value = null }
+    fun toggleReportSection(section: ReportSection) { _reportDraft.value = _reportDraft.value?.toggle(section) }
+    fun confirmReportDraft() {
+        val draft = _reportDraft.value?.takeIf { it.canGenerate } ?: return
+        _reportDraft.value = null
+        generateReport(draft.vehicleId, draft.selected)
+    }
 
     fun updateMileage(vehicle: Vehicle, newMileage: Int) {
         if (isUpdatingMileage) return
@@ -76,17 +116,18 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    fun generateReport(context: android.content.Context, vehicleId: Long) {
+    fun generateReport(vehicleId: Long, sections: Set<ReportSection> = ReportSection.entries.toSet()) {
+        if (sections.isEmpty()) return
+        if (isGeneratingReport) return
+        isGeneratingReport = true
         viewModelScope.launch {
-            val reportData = generateVehicleReportUseCase(vehicleId)
-            if (reportData != null) {
-                com.carmanager.app.core.util.PdfReportHelper.generateAndShare(
-                    context = context,
-                    vehicle = reportData.vehicle,
-                    fuelRecords = reportData.fuelRecords,
-                    maintenanceRecords = reportData.maintenanceRecords
-                )
-            }
+            try {
+                _generatedReport.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { storeVehicleReportUseCase(vehicleId, sections) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                Log.e("PdfReportHelper", "Erreur lors de la génération du PDF", error)
+                _uiEvent.send(UiEvent.ShowSnackbar("Rapport non enregistré. Réessayez depuis le véhicule."))
+            } finally { isGeneratingReport = false }
         }
     }
 }

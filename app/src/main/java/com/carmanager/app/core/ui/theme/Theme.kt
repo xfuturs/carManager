@@ -47,6 +47,7 @@ val LocalCategoryColors = staticCompositionLocalOf {
 }
 
 val LocalAppUnits = staticCompositionLocalOf { AppUnits() }
+val LocalAppAppearance = staticCompositionLocalOf { com.carmanager.app.core.domain.repository.AppTheme.LIGHT }
 
 private val LightColorScheme = lightColorScheme(
     primary = CarManagerColors.primaryLight,
@@ -166,7 +167,8 @@ fun CarManagerTheme(
 
     CompositionLocalProvider(
         LocalCategoryColors provides categoryColors,
-        LocalAppUnits provides units
+        LocalAppUnits provides units,
+        LocalAppAppearance provides if (darkTheme) com.carmanager.app.core.domain.repository.AppTheme.DARK else com.carmanager.app.core.domain.repository.AppTheme.LIGHT
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

@@ -1,25 +1,29 @@
 package com.carmanager.app.features.auth
 
 import com.carmanager.app.core.ui.components.CarManagerBackAppBar
+import com.carmanager.app.core.ui.components.SecondarySectionTitle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.R
-import com.carmanager.app.core.ui.theme.VehicleColor
+import com.carmanager.app.core.ui.theme.CarManagerShapes
 import com.carmanager.app.core.util.UiEvent
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -64,7 +68,7 @@ fun LoginScreen(
         viewModel.uiEvent.collect { event ->
             when (event) {
                 is UiEvent.Success -> onNavigateBack()
-                is UiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+                is UiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(loginErrorMessage(event.message))
             }
         }
     }
@@ -83,33 +87,48 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(painterResource(R.drawable.ic_car_manager_mark), contentDescription = null,
+                    modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                SecondarySectionTitle("Car Manager", Modifier.weight(1f))
+            }
             Text(
-                text = stringResource(R.string.login_desc),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Suivez vos véhicules, vos dépenses et vos documents.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
             Button(
                 onClick = { googleLauncher.launch(googleSignInClient.signInIntent) },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
+                    if (viewModel.isLoading) {
+                        stateDescription = "Connexion en cours"
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                },
                 enabled = !viewModel.isLoading,
-                colors = ButtonDefaults.buttonColors(containerColor = VehicleColor)
+                shape = CarManagerShapes.control,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 if (viewModel.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp).clearAndSetSemantics {},
+                        color = MaterialTheme.colorScheme.onSurface, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Connexion en cours…", Modifier.weight(1f), textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface)
                 } else {
-                    Text(stringResource(R.string.login_google))
+                    Text(stringResource(R.string.login_google), Modifier.weight(1f), textAlign = TextAlign.Center)
                 }
             }
-            TextButton(onClick = onNavigateToPrivacy, modifier = Modifier.padding(top = 8.dp)) {
-                Text(stringResource(R.string.settings_privacy_policy))
+            Text(stringResource(R.string.login_desc), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = onNavigateToPrivacy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.settings_privacy_policy), Modifier.weight(1f), textAlign = TextAlign.Start)
             }
         }
     }

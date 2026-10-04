@@ -27,14 +27,15 @@ fun AppTheme.usesDarkColors(systemDark: Boolean): Boolean = when (this) {
 fun observeAppearanceBootstrap(
     preferences: Flow<AppTheme>,
     timeoutMillis: Long = 2_000,
-    onFallback: () -> Unit = {}
+    onFallback: () -> Unit = {},
+    fallbackTheme: AppTheme = AppTheme.SYSTEM
 ): Flow<AppearanceBootstrapState> = channelFlow {
     send(AppearanceBootstrapState.Loading)
     val first = CompletableDeferred<Unit>()
     val watchdog = launch {
         if (withTimeoutOrNull(timeoutMillis) { first.await() } == null) {
             onFallback()
-            send(AppearanceBootstrapState.Ready(AppTheme.SYSTEM, fallback = true))
+            send(AppearanceBootstrapState.Ready(fallbackTheme, fallback = true))
         }
     }
     try {
@@ -45,12 +46,12 @@ fun observeAppearanceBootstrap(
         }
         if (!first.isCompleted) {
             onFallback()
-            send(AppearanceBootstrapState.Ready(AppTheme.SYSTEM, fallback = true))
+            send(AppearanceBootstrapState.Ready(fallbackTheme, fallback = true))
         }
     } catch (error: Exception) {
         if (error is CancellationException) throw error
         onFallback()
-        send(AppearanceBootstrapState.Ready(AppTheme.SYSTEM, fallback = true))
+        send(AppearanceBootstrapState.Ready(fallbackTheme, fallback = true))
     } finally {
         watchdog.cancel()
     }

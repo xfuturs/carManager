@@ -15,22 +15,35 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-data class MaintenanceSaveResult(val id: Long, val warning: String? = null)
+data class MaintenanceSaveResult(val id: Long, val warning: String? = null, val reminderEnabled: Boolean = true)
 
-class SaveMaintenanceUseCase @Inject constructor(
+class SaveMaintenanceUseCase internal constructor(
     private val repository: MaintenanceRepository,
     private val vehicleRepository: VehicleRepository,
     private val session: WorkspaceSession,
-    @ApplicationContext private val context: Context
+    private val context: Context,
+    private val reminders: com.carmanager.app.core.util.LocalReminderCoordinator? = null
 ) {
+    @Inject constructor(repository: MaintenanceRepository, vehicleRepository: VehicleRepository, session: WorkspaceSession,
+        reminders: com.carmanager.app.core.util.LocalReminderCoordinator, @ApplicationContext context: Context)
+        : this(repository, vehicleRepository, session, context, reminders)
     suspend operator fun invoke(record: MaintenanceRecord): MaintenanceSaveResult {
         GarageValidation.maintenance(record)
         // Échec ici : transaction annulée, le formulaire pourra réessayer.
         val id = repository.saveMaintenanceRecord(record)
         // Après commit, une alarme échouée ne transforme pas la sauvegarde en échec réessayable.
         return withContext(NonCancellable) {
+            var reminderEnabled = false
             try {
+                if (reminders != null) {
+                    session.requireWritable(record.ownerKey)
+                    reminderEnabled = reminders.enabledFor(record)
+                    reminders.reconcileNow()
+                    return@withContext MaintenanceSaveResult(id, reminderEnabled = reminderEnabled)
+                }
+                // Chemin compatible des tests historiques ; Hilt fournit toujours le coordinateur en production.
                 record.nextDueDate?.takeIf { it > System.currentTimeMillis() }?.let { dueDate ->
+                    reminderEnabled = true
                     session.requireWritable(record.ownerKey)
                     val vehicle = checkNotNull(vehicleRepository.observeById(record.vehicleId).firstOrNull())
                     session.requireWritable(record.ownerKey)
@@ -42,10 +55,10 @@ class SaveMaintenanceUseCase @Inject constructor(
                     NotificationHelper.scheduleReminder(context, dueDate, "Rappel : $label",
                         "Votre ${vehicle.brand} a une échéance aujourd'hui.", record.ownerKey, id)
                 }
-                MaintenanceSaveResult(id)
+                MaintenanceSaveResult(id, reminderEnabled = reminderEnabled)
             } catch (e: Exception) {
                 Log.e("SaveMaintenance", "Intervention enregistrée, rappel non programmé", e)
-                MaintenanceSaveResult(id, "Intervention enregistrée. Le rappel n'a pas pu être programmé ; ne réenregistrez pas l'intervention.")
+                MaintenanceSaveResult(id, "Intervention enregistrée. Le rappel n'a pas pu être programmé ; ne réenregistrez pas l'intervention.", reminderEnabled)
             }
         }
     }

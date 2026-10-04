@@ -169,7 +169,7 @@ class AddMaintenanceViewModel @Inject constructor(
                 val result = saveMaintenanceUseCase(record)
                 hasSaved = true
                 postSaveWarning = result.warning
-                if (notificationPermission == NotificationPermissionStatus.MISSING &&
+                if (result.reminderEnabled && notificationPermission == NotificationPermissionStatus.MISSING &&
                     record.nextDueDate?.let { it > System.currentTimeMillis() } == true) {
                     // Le commit et la programmation sont déjà terminés. Le callback ne sauvegarde jamais.
                     awaitingNotificationPermission = true

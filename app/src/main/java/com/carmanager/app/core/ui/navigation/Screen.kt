@@ -1,7 +1,6 @@
 package com.carmanager.app.core.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -64,7 +63,6 @@ enum class TopLevelDestination(
     val icon: ImageVector,
 ) {
     Dashboard(Screen.Dashboard.route, R.string.nav_dashboard, Icons.Default.Home),
-    Vehicles(Screen.Vehicles.route, R.string.nav_vehicles, Icons.Default.DirectionsCar),
     Calculators(Screen.Calculators.route, R.string.nav_calculators, Icons.Default.Calculate),
     Settings(Screen.Settings.route, R.string.nav_settings, Icons.Default.Settings),
 }

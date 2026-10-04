@@ -35,6 +35,7 @@ import com.carmanager.app.core.ui.theme.AppUnits
 import com.carmanager.app.core.ui.theme.CarManagerTheme
 import com.carmanager.app.core.util.GoogleMobileAdsConsentManager
 import com.carmanager.app.core.ads.MobileAdsInitializer
+import com.carmanager.app.core.ads.InterstitialAdManager
 import com.carmanager.app.core.ads.adsEligible
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var session: WorkspaceSession
     @Inject lateinit var deletion: AccountDeletion
     @Inject lateinit var adsInitializer: MobileAdsInitializer
+    @Inject lateinit var interstitials: InterstitialAdManager
 
     private lateinit var googleMobileAdsConsentManager: GoogleMobileAdsConsentManager
 
@@ -100,6 +102,9 @@ class MainActivity : ComponentActivity() {
             val canShowAds = adsReady && premiumChecked && adsEligible(consentState.canRequestAds, isPremium)
             val owner by session.owner.collectAsState()
             val deletionState by deletion.state.collectAsState()
+            SideEffect {
+                interstitials.updateEligibility(canShowAds && !deletionState.running && deletionState.stage == null)
+            }
             val readyAppearance = appearance as? AppearanceBootstrapState.Ready
             if (!canComposeLocalApp(appearance, workspaceResolved)) {
                 Box(Modifier.fillMaxSize().background(colorResource(R.color.startup_surface)))
@@ -117,6 +122,8 @@ class MainActivity : ComponentActivity() {
                     LocalViewModelStoreOwner provides workspaceStore,
                     LocalWorkspaceOwner provides owner
                 ) { CarManagerApp(
+                    activity = this@MainActivity,
+                    onInterstitialOpportunity = { interstitials.onNavigationOpportunity(this@MainActivity) },
                     canShowAds = canShowAds && !isPremium,
                     isPrivacyOptionsRequired = consentState.showPrivacyOptions,
                     onPrivacyOptionsClick = {
@@ -139,5 +146,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         premiumRepository.checkPremiumStatus()
         if (::googleMobileAdsConsentManager.isInitialized) googleMobileAdsConsentManager.refreshState()
+    }
+
+    override fun onDestroy() {
+        interstitials.detachHost()
+        super.onDestroy()
     }
 }

@@ -8,7 +8,8 @@ enum class DocumentCategory {
     FUEL,                // Tickets carburant
     PHOTOS,              // Photos véhicule
     CLAIMS,              // Sinistres, constats
-    OTHER                // Divers
+    OTHER,               // Divers
+    REPORTS              // Rapports PDF générés par Car Manager
 }
 
 data class Document(

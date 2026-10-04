@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import com.carmanager.app.core.domain.validation.FormValidationException
 import com.carmanager.app.core.domain.validation.NumericInput
 
+enum class CalculatorTool { TRIP, FILL, RECHARGE, COMPARISON }
+
 enum class InputError { NUMBER, POSITIVE, PRICE, START_PERCENT, TARGET_PERCENT, TARGET_ORDER }
 data class CalculatorInput(val text: String = "", val error: InputError? = null)
 data class TripState(
@@ -43,6 +45,11 @@ data class ComparisonState(
 
 /** État temporaire par entrée de navigation. Aucun dépôt ni service injecté. */
 class CalculatorsViewModel : ViewModel() {
+    var selectedTool by mutableStateOf(CalculatorTool.TRIP)
+        private set
+
+    fun selectTool(tool: CalculatorTool) { selectedTool = tool }
+
     var trip by mutableStateOf(TripState())
         private set
     var fill by mutableStateOf(FillState())

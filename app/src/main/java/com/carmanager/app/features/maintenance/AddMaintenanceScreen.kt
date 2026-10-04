@@ -1,6 +1,9 @@
 package com.carmanager.app.features.maintenance
 
-import com.carmanager.app.core.ui.components.CarManagerBackAppBar
+import com.carmanager.app.core.ui.components.*
+import com.carmanager.app.core.ui.theme.CarManagerShapes
+import com.carmanager.app.core.ui.theme.CarManagerDimensions
+import com.carmanager.app.core.ui.theme.CarManagerSpacing
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -11,19 +14,15 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,11 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.core.content.ContextCompat
 import com.carmanager.app.R
 import com.carmanager.app.core.domain.model.MaintenanceType
-import com.carmanager.app.core.ui.components.DatePickerField
-import com.carmanager.app.core.ui.components.MileageSuggestions
 import com.carmanager.app.core.ui.theme.LocalAppUnits
-import com.carmanager.app.core.ui.theme.MaintenanceColor
-import com.carmanager.app.core.ui.theme.SuccessGreen
 import com.carmanager.app.core.util.UiEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -124,124 +119,100 @@ fun AddMaintenanceScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Bouton de Scan IA
-            OutlinedButton(
-                onClick = { pickerLauncher.launch("image/*") },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaintenanceColor)
-            ) {
-                if (viewModel.isScanning) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaintenanceColor)
-                } else {
-                    Icon(Icons.Default.DocumentScanner, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.ocr_scan_maintenance))
+        FormScreenContent(padding) {
+            FormSection("Opération") {
+                MaintenanceTypeDropdown(
+                    selectedType = viewModel.type,
+                    onTypeSelected = viewModel::onTypeChange,
+                    getTypeName = { getMaintenanceTypeName(it) },
+                    enabled = !viewModel.isTypeLocked
+                )
+                OutlinedTextField(
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    value = viewModel.cost,
+                    onValueChange = viewModel::onCostChange,
+                    label = { Text(stringResource(R.string.maintenance_cost) + " (${units.currency})") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true
+                )
+                DatePickerField(
+                    label = "Date de réalisation",
+                    selectedDate = viewModel.date,
+                    onDateSelected = viewModel::onDateChange
+                )
+                OutlinedButton(
+                    onClick = { pickerLauncher.launch("image/*") },
+                    shape = CarManagerShapes.control,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = CarManagerDimensions.touchTarget),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                ) {
+                    if (viewModel.isScanning) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Icon(Icons.Default.DocumentScanner, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.ocr_scan_maintenance), style = MaterialTheme.typography.labelSmall)
+                    }
                 }
+
             }
-
-            DatePickerField(
-                label = "Date de réalisation",
-                selectedDate = viewModel.date,
-                onDateSelected = viewModel::onDateChange
-            )
-
-            MaintenanceTypeDropdown(
-                selectedType = viewModel.type,
-                onTypeSelected = viewModel::onTypeChange,
-                getTypeName = { getMaintenanceTypeName(it) },
-                enabled = !viewModel.isTypeLocked
-            )
-
-            OutlinedTextField(
-                value = viewModel.mileage,
-                onValueChange = viewModel::onMileageChange,
-                label = { Text(stringResource(R.string.vehicle_mileage)) },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                placeholder = { Text("Dernier : ${viewModel.currentVehicleMileage} ${units.distance}") }
-            )
-
-            MileageSuggestions(
-                onIncrementSelect = viewModel::onEstimatedMileageSelect
-            )
-
-            MaintenanceSuggestions(
-                type = viewModel.type,
-                onMileageSelect = viewModel::applyMileageIncrement,
-                onDateSelect = viewModel::applyDateIncrement
-            )
-
-            OutlinedTextField(
-                value = viewModel.cost,
-                onValueChange = viewModel::onCostChange,
-                label = { Text(stringResource(R.string.maintenance_cost) + " (${units.currency})") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
-            )
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text(
-                text = "Planification (Prochaine échéance)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-
-            DatePickerField(
-                label = stringResource(R.string.maintenance_next_due_date),
-                selectedDate = viewModel.nextDueDate,
-                onDateSelected = viewModel::onNextDueDateChange
-            )
-
-            OutlinedTextField(
-                value = viewModel.nextDueMileage,
-                onValueChange = viewModel::onNextDueMileageChange,
-                label = { Text(stringResource(R.string.maintenance_next_due_mileage)) },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                placeholder = { Text(units.distance) }
-            )
-
-            OutlinedTextField(
-                value = viewModel.note,
-                onValueChange = viewModel::onNoteChange,
-                label = { Text(stringResource(R.string.fuel_note)) },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-
-            Button(
-                onClick = { viewModel.save(notificationPermissionStatus()) },
-                enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp)
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SuccessGreen,
-                    contentColor = Color.White
-                ),
-                shape = MaterialTheme.shapes.large
-            ) {
-                @Suppress("DEPRECATION")
-                Text(
-                    text = stringResource(R.string.save),
-                    style = MaterialTheme.typography.titleMedium
+            FormSection("Kilométrage") {
+                OutlinedTextField(
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    value = viewModel.mileage,
+                    onValueChange = viewModel::onMileageChange,
+                    label = { Text(stringResource(R.string.vehicle_mileage)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    placeholder = { Text("Dernier : ${viewModel.currentVehicleMileage} ${units.distance}") }
+                )
+                MileageSuggestions(
+                    onIncrementSelect = viewModel::onEstimatedMileageSelect
                 )
             }
+            FormSection("Prochaine échéance (facultative)") {
+                DatePickerField(
+                    label = stringResource(R.string.maintenance_next_due_date),
+                    selectedDate = viewModel.nextDueDate,
+                    onDateSelected = viewModel::onNextDueDateChange
+                )
+                OutlinedTextField(
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    value = viewModel.nextDueMileage,
+                    onValueChange = viewModel::onNextDueMileageChange,
+                    label = { Text(stringResource(R.string.maintenance_next_due_mileage)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    placeholder = { Text(units.distance) }
+                )
+                MaintenanceSuggestions(
+                    type = viewModel.type,
+                    onMileageSelect = viewModel::applyMileageIncrement,
+                    onDateSelect = viewModel::applyDateIncrement
+                )
+            }
+            FormSection("Détails") {
+                OutlinedTextField(
+                    shape = CarManagerShapes.control,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    value = viewModel.note,
+                    onValueChange = viewModel::onNoteChange,
+                    label = { Text(stringResource(R.string.fuel_note)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+            }
+            FormSaveAction(stringResource(R.string.save),
+                enabled = !viewModel.isSaving && !viewModel.hasSaved && viewModel.isVehicleLoaded && !viewModel.isScanning,
+                onClick = { viewModel.save(notificationPermissionStatus()) })
         }
+
     }
 }
 
@@ -317,24 +288,25 @@ private fun SuggestionLine(
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Start
         )
         Spacer(modifier = Modifier.height(4.dp))
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
             suggestions.forEach { label ->
                 SuggestionChip(
+                    modifier = Modifier.heightIn(min = CarManagerDimensions.touchTarget),
+                    shape = CarManagerShapes.control,
                     onClick = { onSelect(label) },
-                    label = { Text(label) }
+                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
                 )
             }
         }
@@ -357,6 +329,8 @@ fun MaintenanceTypeDropdown(
         modifier = Modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
+            shape = CarManagerShapes.control,
+            textStyle = MaterialTheme.typography.bodyMedium,
             value = getTypeName(selectedType),
             onValueChange = {},
             readOnly = true,

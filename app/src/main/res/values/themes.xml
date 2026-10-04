@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.CarManager" parent="android:Theme.Material.Light.NoActionBar" />
-    <color name="startup_surface">#808080</color>
+    <color name="startup_surface">@color/brand_splash_background</color>
     <style name="Theme.CarManager.Starting" parent="Theme.CarManager">
-        <item name="android:windowBackground">@color/startup_surface</item>
+        <item name="android:windowBackground">@drawable/car_manager_launch_background</item>
     </style>
 </resources>

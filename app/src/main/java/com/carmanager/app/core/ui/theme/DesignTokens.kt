@@ -8,15 +8,15 @@ object CarManagerSpacing {
     val extraSmall = 4.dp
     val chromeVertical = 6.dp
     val small = 8.dp
-    val firstContentTop = 8.dp
+    val firstContentTop = 4.dp
     val medium = 12.dp
     val screenHorizontal = 16.dp
     val large = 24.dp
 }
 
 object CarManagerDimensions {
-    val topLevelToolbar = 54.dp
-    val secondaryToolbar = 56.dp
+    val topLevelToolbar = 48.dp
+    val secondaryToolbar = 52.dp
     val navigationMinHeight = 66.dp
     val touchTarget = 48.dp
     val icon = 24.dp

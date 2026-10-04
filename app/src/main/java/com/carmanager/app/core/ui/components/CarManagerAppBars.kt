@@ -26,13 +26,12 @@ private fun toolbarHeight(style: TextStyle, minimumHeight: Dp, verticalPadding: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CarManagerTopLevelAppBar(title: String) {
+fun CarManagerTopLevelAppBar(title: String, actions: @Composable RowScope.() -> Unit = {}) {
     CenterAlignedTopAppBar(
         title = {
             Text(title, style = CarManagerTypography.pageTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
-        // Material ajoute déjà 4 dp de chaque côté : total = padding écran de 16 dp.
-        modifier = Modifier.padding(horizontal = CarManagerSpacing.screenHorizontal - CarManagerSpacing.extraSmall),
+        actions = actions,
         expandedHeight = toolbarHeight(CarManagerTypography.pageTitle, CarManagerDimensions.topLevelToolbar),
         windowInsets = TopAppBarDefaults.windowInsets,
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

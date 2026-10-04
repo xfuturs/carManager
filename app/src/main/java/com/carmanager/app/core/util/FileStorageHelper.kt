@@ -12,6 +12,9 @@ import java.util.UUID
 object FileStorageHelper {
     private const val DOCUMENTS_DIR = "vehicle_documents"
 
+    internal fun saveGeneratedPdf(context: Context, filename: String, render: (java.io.OutputStream) -> Unit): String =
+        ReportFileIO.create(File(context.filesDir, DOCUMENTS_DIR), filename, render)
+
     fun saveFileToInternalStorage(context: Context, uri: Uri): String? {
         return try {
             val contentResolver = context.contentResolver
