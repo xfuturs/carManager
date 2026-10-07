@@ -61,3 +61,14 @@ fun FormSaveAction(label: String, enabled: Boolean, onClick: () -> Unit) {
         Text(label, style = CarManagerTypography.buttonLabel)
     }
 }
+
+/** Échec terminal de chargement : les champs ne sont pas présentés comme des données chargées. */
+@Composable
+fun FormLoadFailure(message: String?, onRetry: () -> Unit) {
+    if (message != null) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(message, color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = onRetry) { Text("Réessayer") }
+        }
+    }
+}

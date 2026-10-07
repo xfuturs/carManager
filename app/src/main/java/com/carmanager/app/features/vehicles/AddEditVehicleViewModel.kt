@@ -82,6 +82,12 @@ class AddEditVehicleViewModel @Inject constructor(
     var isCapacityError by mutableStateOf(false)
         private set
 
+    var isVehicleLoading by mutableStateOf(false)
+        private set
+    var loadError by mutableStateOf<String?>(null)
+        private set
+    fun retryLoading() { if (isEditMode) loadVehicle(currentVehicleId) }
+
     private var currentVehicleId: Long = 0L
     private var loadedVehicle: Vehicle? = null
     private var modelsJob: kotlinx.coroutines.Job? = null
@@ -115,6 +121,7 @@ class AddEditVehicleViewModel @Inject constructor(
                     prepopulateDatabase()
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiEvent.send(UiEvent.ShowSnackbar("Erreur initialisation catalogue : ${e.message}"))
             }
         }
@@ -137,15 +144,25 @@ class AddEditVehicleViewModel @Inject constructor(
             }
             referenceDao.insertAll(references)
         } catch (e: Exception) {
+             if (e is CancellationException) throw e
              _uiEvent.send(UiEvent.ShowSnackbar("Erreur catalogue : ${e.message}"))
         }
     }
 
     private fun loadVehicle(id: Long) {
+        if (isVehicleLoading) return
+        isVehicleLoading = true
+        loadedVehicle = null
+        loadError = null
         viewModelScope.launch {
-            vehicleRepository.observeById(id).firstOrNull()?.let { vehicle ->
+            try {
+                session.requireWritable(workspaceOwner)
+                val vehicle = vehicleRepository.observeById(id).firstOrNull() ?: error("Véhicule absent.")
+                val customBrand = vehicle.brand !in referenceDao.getAllBrands().first()
+                session.requireWritable(workspaceOwner)
+                check(vehicle.ownerKey == workspaceOwner && vehicle.id == id)
                 loadedVehicle = vehicle
-                isCustomBrand = vehicle.brand !in referenceDao.getAllBrands().first()
+                isCustomBrand = customBrand
                 isCustomModel = isCustomBrand
                 brand = vehicle.brand
                 model = vehicle.model
@@ -160,7 +177,11 @@ class AddEditVehicleViewModel @Inject constructor(
                 batteryCapacity = vehicle.batteryCapacity?.toString() ?: ""
                 
                 loadModelsForBrand(vehicle.brand)
-            }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                loadError = "Véhicule indisponible. Réessayez ou rouvrez le formulaire."
+                _uiEvent.send(UiEvent.ShowSnackbar(loadError!!))
+            } finally { isVehicleLoading = false }
         }
     }
 
@@ -213,15 +234,21 @@ class AddEditVehicleViewModel @Inject constructor(
 
     fun deleteVehicle() {
         if (!isEditMode || isSaving || hasSaved) return
+        isSaving = true
         viewModelScope.launch {
             try {
                 vehicleRepository.observeById(currentVehicleId).firstOrNull()?.let { vehicle ->
-                    deleteVehicleUseCase(vehicle)
+                    session.requireWritable(workspaceOwner)
+                    check(vehicle.ownerKey == workspaceOwner)
+                    val warning = deleteVehicleUseCase(vehicle)
+                    hasSaved = true
+                    warning?.let { _uiEvent.send(UiEvent.ShowSnackbar(it)) }
                     _uiEvent.send(UiEvent.Success)
                 }
             } catch (e: Exception) {
-                _uiEvent.send(UiEvent.ShowSnackbar("Erreur lors de la suppression: ${e.localizedMessage}"))
-            }
+                if (e is CancellationException) throw e
+                _uiEvent.send(UiEvent.ShowSnackbar("Suppression impossible. Rouvrez le formulaire ou réessayez."))
+            } finally { isSaving = false }
         }
     }
 

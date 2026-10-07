@@ -19,6 +19,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -72,48 +73,76 @@ class DocumentsViewModel @Inject constructor(
         deleteDocument(document)
     }
 
+    private val fileResolver = OwnedDocumentFileResolver(session, access, context)
+    private val ordinaryActions = OrdinaryDocumentActions(fileResolver, context)
+
+    fun openDocument(document: Document) {
+        viewModelScope.launch {
+            try { ordinaryActions.open(document, workspaceOwner, vehicleId) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar("Ouverture impossible : document indisponible ou aucun lecteur compatible."))
+            }
+        }
+    }
+
     fun addDocument(uri: Uri, title: String, category: DocumentCategory) {
         viewModelScope.launch {
-            var createdFile: String? = null
-            var committed = false
             try {
                 require(category != DocumentCategory.REPORTS) { "Les rapports Car Manager sont créés depuis Statistiques." }
-                access.write(workspaceOwner, vehicleId) {
-                    val path = FileStorageHelper.saveFileToInternalStorage(context, uri)
-                        ?: error("Erreur lors de la sauvegarde du fichier")
-                    createdFile = path
-                    documentRepository.saveDocument(Document(ownerKey = workspaceOwner, vehicleId = vehicleId,
-                        title = title, category = category, filePath = path, date = System.currentTimeMillis()))
-                }
-                committed = true
+                access.read(workspaceOwner, vehicleId) { Unit }
+                com.carmanager.app.core.util.StagedDocumentFile.store(
+                    prepare = {
+                        val coroutine = kotlinx.coroutines.currentCoroutineContext()
+                        FileStorageHelper.saveFileToInternalStorage(context, uri) {
+                            coroutine.ensureActive(); session.requireWritable(workspaceOwner)
+                        }
+                    },
+                    insert = { path -> access.write(workspaceOwner, vehicleId) {
+                        val document = Document(ownerKey = workspaceOwner, vehicleId = vehicleId,
+                            title = title, category = category, filePath = path, date = System.currentTimeMillis())
+                        val id = documentRepository.saveDocument(document)
+                        check(id > 0) { "Document non enregistré." }
+                        document.copy(id = id)
+                    } },
+                    remove = FileStorageHelper::deleteFile
+                )
                 _uiEvent.send(UiEvent.ShowSnackbar("Document ajouté avec succès"))
-            } catch (e: Exception) {
-                if (!committed) createdFile?.let { FileStorageHelper.deleteFile(it) }
-                if (e is CancellationException) throw e
-                _uiEvent.send(UiEvent.ShowSnackbar(e.message ?: "Sauvegarde impossible"))
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar(if (category == DocumentCategory.REPORTS)
+                    "Les rapports Car Manager sont créés depuis Statistiques."
+                    else "Import impossible. Vérifiez le fichier et l'espace disponible, puis réessayez."))
             }
         }
     }
 
     fun convertToPdf(document: Document) {
         viewModelScope.launch {
-            var createdFile: String? = null
-            var committed = false
             try {
-                access.write(workspaceOwner, vehicleId) {
-                    check(document.ownerKey == workspaceOwner && document.vehicleId == vehicleId)
-                    val source = access.documentFile(workspaceOwner, document.id, document.filePath, File(context.filesDir, "vehicle_documents"))
-                    val path = FileStorageHelper.convertImageToPdf(context, source.path) ?: error("Erreur lors de la conversion")
-                    createdFile = path
-                    documentRepository.saveDocument(Document(ownerKey = workspaceOwner, vehicleId = vehicleId,
-                        title = "${document.title} (PDF)", category = document.category, filePath = path, date = System.currentTimeMillis()))
-                }
-                committed = true
+                check(document.category != DocumentCategory.REPORTS) { "Un rapport est déjà au format PDF." }
+                val source = fileResolver.file(document, workspaceOwner, vehicleId)
+                com.carmanager.app.core.util.StagedDocumentFile.store(
+                    prepare = {
+                        val coroutine = kotlinx.coroutines.currentCoroutineContext()
+                        FileStorageHelper.convertImageToPdf(context, source.path) {
+                            coroutine.ensureActive(); session.requireWritable(workspaceOwner)
+                        }
+                    },
+                    insert = { path -> access.write(workspaceOwner, vehicleId) {
+                        val result = Document(ownerKey = workspaceOwner, vehicleId = vehicleId,
+                            title = "${document.title} (PDF)", category = document.category,
+                            filePath = path, date = System.currentTimeMillis())
+                        val id = documentRepository.saveDocument(result)
+                        check(id > 0) { "Document non enregistré." }
+                        result.copy(id = id)
+                    } },
+                    remove = FileStorageHelper::deleteFile
+                )
                 _uiEvent.send(UiEvent.ShowSnackbar("Conversion réussie"))
-            } catch (e: Exception) {
-                if (!committed) createdFile?.let { FileStorageHelper.deleteFile(it) }
-                if (e is CancellationException) throw e
-                _uiEvent.send(UiEvent.ShowSnackbar(e.message ?: "Conversion impossible"))
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar("Conversion impossible. Vérifiez l'image et l'espace disponible, puis réessayez."))
             }
         }
     }

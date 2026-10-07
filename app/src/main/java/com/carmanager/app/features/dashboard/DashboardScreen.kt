@@ -1,5 +1,10 @@
 package com.carmanager.app.features.dashboard
 
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import com.carmanager.app.core.ui.components.CarManagerTopLevelAppBar
 import com.carmanager.app.core.ui.theme.CarManagerSpacing
 import androidx.compose.foundation.layout.*
@@ -14,7 +19,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import com.carmanager.app.core.util.UiEvent
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
@@ -47,7 +51,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Event
-import java.util.concurrent.TimeUnit
 import com.carmanager.app.core.util.DateFormatter
 
 @Composable
@@ -66,13 +69,17 @@ fun DashboardScreen(
     onNavigateToDeadlines: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val state by viewModel.uiState.collectAsState()
+    DashboardLifecycle(viewModel)
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var fabHeightPixels by remember { mutableIntStateOf(0) }
     val fabClearance = with(LocalDensity.current) { fabHeightPixels.toDp() } + 32.dp
-    LaunchedEffect(viewModel) {
-        viewModel.uiEvent.collect { event ->
-            if (event is UiEvent.ShowSnackbar) snackbarHostState.showSnackbar(event.message)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.uiEvent.collect { event ->
+                if (event is UiEvent.ShowSnackbar) snackbarHostState.showSnackbar(event.message)
+            }
         }
     }
 
@@ -243,7 +250,7 @@ private fun DashboardSummary(stats: DashboardStats, onVehicles: () -> Unit, onSt
 @Composable
 private fun DashboardDeadlinesPreview(stats: DashboardStats, onOpen: () -> Unit) {
     val units = LocalAppUnits.current
-    val now = System.currentTimeMillis()
+    val time = stats.temporalContext ?: return
     Card(shape = CarManagerShapes.card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -256,7 +263,7 @@ private fun DashboardDeadlinesPreview(stats: DashboardStats, onOpen: () -> Unit)
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
             stats.upcomingDeadlines.take(3).forEach { (vehicle, record) ->
-                val daysRemaining = record.nextDueDate?.let { TimeUnit.MILLISECONDS.toDays(it - now) }
+                val daysRemaining = record.nextDueDate?.let { time.daysUntil(it) }
                 val kmRemaining = record.nextDueMileage?.let { it - vehicle.currentMileage }
                 // Seuils visuels identiques à DeadlineItem : calcul métier et tri restent dans le use case.
                 val isUrgent = (daysRemaining != null && daysRemaining < 7) || (kmRemaining != null && kmRemaining < 500)
@@ -278,7 +285,7 @@ private fun DashboardDeadlinesPreview(stats: DashboardStats, onOpen: () -> Unit)
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                         record.nextDueDate?.let { Text(DateFormatter.formatShort(it), style = MaterialTheme.typography.labelSmall) }
-                        record.nextDueMileage?.let { Text("À $it ${units.distance}", style = MaterialTheme.typography.labelSmall) }
+                        record.nextDueMileage?.let { Text("À ${com.carmanager.app.core.util.DistancePresentation.recorded(it, units.distance)}", style = MaterialTheme.typography.labelSmall) }
                         Text(if (isOverdue) "Échéance dépassée" else if (isUrgent) "À prévoir" else "À venir",
                             style = MaterialTheme.typography.labelSmall, color = color)
                     }

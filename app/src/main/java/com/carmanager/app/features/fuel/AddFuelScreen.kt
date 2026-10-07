@@ -74,6 +74,7 @@ fun AddFuelScreen(
         }
     ) { padding ->
         FormScreenContent(padding) {
+            com.carmanager.app.core.ui.components.FormLoadFailure(viewModel.loadError, viewModel::retryLoading)
             if (viewModel.fuelType == FuelType.HYBRID) {
                 FormSection("Énergie") {
                     EnergyTypeSelector(

@@ -31,7 +31,7 @@ import com.carmanager.app.core.domain.model.ReportSection
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    getDashboardStatsUseCase: GetDashboardStatsUseCase,
+    private val getDashboardStatsUseCase: GetDashboardStatsUseCase,
     private val updateMileageUseCase: UpdateMileageUseCase,
     private val settingsRepository: SettingsRepository,
     private val premiumRepository: PremiumRepository,
@@ -48,6 +48,7 @@ class DashboardViewModel @Inject constructor(
             initialValue = LocalDataState.Loading
         )
     fun retryLoading() { retry.value++ }
+    fun refreshTime() { getDashboardStatsUseCase.refreshTime() }
     fun toggleAppearance() {
         viewModelScope.launch {
             try { settingsRepository.toggleTheme() }

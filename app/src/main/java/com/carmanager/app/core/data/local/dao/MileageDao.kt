@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface MileageDao {
     @Query("SELECT mileage_records.* FROM mileage_records JOIN vehicles ON vehicles.id = mileage_records.vehicleId WHERE vehicles.ownerKey = :ownerKey AND mileage_records.vehicleId = :vehicleId ORDER BY date DESC")
+    suspend fun getByVehicle(vehicleId: Long, ownerKey: String): List<MileageRecordEntity>
+
+    @Query("SELECT mileage_records.* FROM mileage_records JOIN vehicles ON vehicles.id = mileage_records.vehicleId WHERE vehicles.ownerKey = :ownerKey AND mileage_records.vehicleId = :vehicleId ORDER BY date DESC")
     fun observeByVehicle(vehicleId: Long, ownerKey: String): Flow<List<MileageRecordEntity>>
 
     @Query("SELECT mileage_records.* FROM mileage_records JOIN vehicles ON vehicles.id = mileage_records.vehicleId WHERE vehicles.ownerKey = :ownerKey AND mileage_records.vehicleId = :vehicleId ORDER BY date DESC LIMIT 1")

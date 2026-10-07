@@ -12,32 +12,15 @@ import com.carmanager.app.core.domain.repository.VehicleRepository
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
 
-class GenerateVehicleReportUseCase @Inject constructor(
-    private val vehicleRepository: VehicleRepository,
-    private val fuelRepository: FuelRepository,
-    private val maintenanceRepository: MaintenanceRepository,
-    private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
-    private val mileageRepository: MileageRepository
-) {
-    suspend operator fun invoke(vehicleId: Long): ReportData? {
-        val owner = session.owner.value
-        val vehicle = vehicleRepository.observeById(vehicleId).firstOrNull() ?: return null
-        val fuelRecords = fuelRepository.observeByVehicle(vehicleId).firstOrNull() ?: emptyList()
-        val maintenanceRecords = maintenanceRepository.observeByVehicle(vehicleId).firstOrNull() ?: emptyList()
-        val mileageRecords = mileageRepository.observeByVehicle(vehicleId).firstOrNull() ?: emptyList()
-        session.requireCurrent(owner)
-        check(vehicle.id == vehicleId && vehicle.ownerKey == owner && fuelRecords.all { it.ownerKey == owner && it.vehicleId == vehicleId } &&
-            maintenanceRecords.all { it.ownerKey == owner && it.vehicleId == vehicleId } &&
-            mileageRecords.all { it.ownerKey == owner && it.vehicleId == vehicleId })
-
-        return ReportData(vehicle, fuelRecords, maintenanceRecords, mileageRecords)
-    }
+class GenerateVehicleReportUseCase @Inject constructor(private val reader: OwnedReportSnapshotReader) {
+    suspend operator fun invoke(vehicleId: Long): ReportData? = reader.read(vehicleId)
 
     data class ReportData(
         val vehicle: Vehicle,
         val fuelRecords: List<FuelRecord>,
         val maintenanceRecords: List<MaintenanceRecord>,
         val mileageRecords: List<MileageRecord> = emptyList(),
-        val sections: Set<ReportSection> = ReportSection.entries.toSet()
+        val sections: Set<ReportSection> = ReportSection.entries.toSet(),
+        val presentation: com.carmanager.app.core.util.ReportPresentationSettings = com.carmanager.app.core.util.ReportPresentationSettings()
     )
 }

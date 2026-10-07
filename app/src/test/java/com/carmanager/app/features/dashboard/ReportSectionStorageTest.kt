@@ -74,20 +74,21 @@ class ReportSectionStorageTest {
         }
         assertTrue(captured.isEmpty()); assertTrue(rows.isEmpty()); assertTrue(directory.listFiles()!!.isEmpty())
     }
-    @Test fun `data reader uses existing owned mileage query and preserves stored source rows`() = runTest {
-        val vehicles = mockk<VehicleRepository>(); val fuel = mockk<FuelRepository>(); val maintenance = mockk<MaintenanceRepository>(); val mileage = mockk<MileageRepository>()
+    @Test fun `snapshot reader preserves stored mileage source rows and sections`() = runTest {
         val records = listOf(MileageRecord(1,7,0,900,MileageSource.FUEL,owner),MileageRecord(2,7,1,1000,MileageSource.MANUAL,owner))
-        every { vehicles.observeById(7) } returns flowOf(vehicle); every { fuel.observeByVehicle(7) } returns flowOf(emptyList())
-        every { maintenance.observeByVehicle(7) } returns flowOf(emptyList()); every { mileage.observeByVehicle(7) } returns flowOf(records)
-        val result = GenerateVehicleReportUseCase(vehicles,fuel,maintenance,session,mileage)(7)!!
+        var reads = 0
+        val reader = OwnedReportSnapshotReader(session) { expected, id ->
+            assertEquals(owner, expected); assertEquals(7, id); reads++
+            data.copy(mileageRecords = records)
+        }
+        val result = GenerateVehicleReportUseCase(reader)(7)!!
         assertEquals(records,result.mileageRecords); assertEquals(ReportSection.entries.toSet(),result.sections)
-        verify(exactly=1) { mileage.observeByVehicle(7) }
+        assertEquals(1, reads)
     }
     @Test fun `foreign mileage query snapshot is rejected`() = runTest {
-        val vehicles = mockk<VehicleRepository>(); val fuel = mockk<FuelRepository>(); val maintenance = mockk<MaintenanceRepository>(); val mileage = mockk<MileageRepository>()
-        every { vehicles.observeById(7) } returns flowOf(vehicle); every { fuel.observeByVehicle(7) } returns flowOf(emptyList())
-        every { maintenance.observeByVehicle(7) } returns flowOf(emptyList())
-        every { mileage.observeByVehicle(7) } returns flowOf(listOf(MileageRecord(1,7,0,1,MileageSource.MANUAL,"firebase:B")))
-        try { GenerateVehicleReportUseCase(vehicles,fuel,maintenance,session,mileage)(7); fail<Unit>("foreign mileage") } catch (_: IllegalStateException) {}
+        val reader = OwnedReportSnapshotReader(session) { _, _ ->
+            data.copy(mileageRecords = listOf(MileageRecord(1,7,0,1,MileageSource.MANUAL,"firebase:B")))
+        }
+        try { GenerateVehicleReportUseCase(reader)(7); fail<Unit>("foreign mileage") } catch (_: IllegalStateException) {}
     }
 }

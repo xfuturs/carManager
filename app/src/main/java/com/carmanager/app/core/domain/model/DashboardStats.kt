@@ -6,5 +6,6 @@ data class DashboardStats(
     val monthlyFuelCost: Double = 0.0,
     val monthlyMaintenanceCost: Double = 0.0,
     val nextMaintenance: MaintenanceRecord? = null,
-    val upcomingDeadlines: List<Pair<Vehicle, MaintenanceRecord>> = emptyList()
+    val upcomingDeadlines: List<Pair<Vehicle, MaintenanceRecord>> = emptyList(),
+    val temporalContext: TemporalContext? = null
 )

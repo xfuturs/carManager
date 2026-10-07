@@ -15,18 +15,18 @@ internal object StructuredReportRows {
     private fun decimal(value: Double) = NumberFormat.getNumberInstance(Locale.FRANCE).apply {
         minimumFractionDigits = 2; maximumFractionDigits = 2
     }.format(value)
-    fun fuel(records: List<FuelRecord>): List<StructuredReportRow> = records.map {
+    fun fuel(records: List<FuelRecord>, presentation: ReportPresentationSettings = ReportPresentationSettings()): List<StructuredReportRow> = records.map {
         val label = if (it.isElectric) "Recharge" else "Plein"
         val quantity = decimal(it.liters) + if (it.isElectric) " kWh" else " L"
         StructuredReportRow(date(it.date), "$label • $quantity" + (it.note?.takeIf(String::isNotBlank)?.let { note -> "\nNote : $note" } ?: ""),
-            integer(it.mileage), "${decimal(it.totalPrice)} €")
+            presentation.mileage(it.mileage), CurrencyPresentation.format(it.totalPrice, presentation.currencySymbol))
     }
-    fun mileage(records: List<MileageRecord>): List<StructuredReportRow> = records.map {
+    fun mileage(records: List<MileageRecord>, presentation: ReportPresentationSettings = ReportPresentationSettings()): List<StructuredReportRow> = records.map {
         StructuredReportRow(date(it.date), when (it.source) {
             MileageSource.MANUAL -> "Relevé manuel"
             MileageSource.FUEL -> "Plein ou recharge"
             MileageSource.MAINTENANCE -> "Intervention"
-        }, integer(it.mileage))
+        }, presentation.mileage(it.mileage))
     }
     fun selectedOrder(sections: Set<ReportSection>): List<ReportSection> {
         require(sections.isNotEmpty())

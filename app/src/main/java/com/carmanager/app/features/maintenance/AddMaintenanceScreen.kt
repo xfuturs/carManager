@@ -120,6 +120,7 @@ fun AddMaintenanceScreen(
         }
     ) { padding ->
         FormScreenContent(padding) {
+            com.carmanager.app.core.ui.components.FormLoadFailure(viewModel.loadError, viewModel::retryLoading)
             FormSection("Opération") {
                 MaintenanceTypeDropdown(
                     selectedType = viewModel.type,

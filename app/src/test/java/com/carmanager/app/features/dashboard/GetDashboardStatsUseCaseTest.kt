@@ -50,7 +50,8 @@ class GetDashboardStatsUseCaseTest {
         every { maintenanceRepository.observeNextUpcoming() } returns flowOf(null)
 
         // WHEN
-        val stats = useCase().first()
+        val stats = GetDashboardStatsUseCase(vehicleRepository, fuelRepository, maintenanceRepository, documentRepository,
+            WorkspaceSession(TestDeletionRegistry()), DashboardTimeSource(), kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))().first()
 
         // THEN
         val vehicleStats = stats.vehicles.first()

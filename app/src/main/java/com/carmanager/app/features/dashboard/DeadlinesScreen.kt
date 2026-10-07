@@ -1,5 +1,7 @@
 package com.carmanager.app.features.dashboard
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import com.carmanager.app.core.ui.components.CarManagerBackAppBar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,7 +11,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,7 +23,6 @@ import com.carmanager.app.core.domain.model.Vehicle
 import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.theme.LocalAppUnits
 import com.carmanager.app.core.util.DateFormatter
-import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +30,8 @@ fun DeadlinesScreen(
     onNavigateBack: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val state by viewModel.uiState.collectAsState()
+    DashboardLifecycle(viewModel)
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -52,7 +53,7 @@ fun DeadlinesScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(stats.upcomingDeadlines) { (vehicle, record) ->
-                        DeadlineItem(vehicle, record)
+                        DeadlineItem(vehicle, record, requireNotNull(stats.temporalContext))
                     }
                 }
             }
@@ -61,12 +62,10 @@ fun DeadlinesScreen(
 }
 
 @Composable
-fun DeadlineItem(vehicle: Vehicle, record: MaintenanceRecord) {
-    val now = System.currentTimeMillis()
+fun DeadlineItem(vehicle: Vehicle, record: MaintenanceRecord, time: com.carmanager.app.core.domain.model.TemporalContext) {
     val units = LocalAppUnits.current
     val daysRemaining = record.nextDueDate?.let { 
-        val diff = it - now
-        TimeUnit.MILLISECONDS.toDays(diff)
+        time.daysUntil(it)
     }
     
     val kmRemaining = record.nextDueMileage?.let { 
@@ -121,7 +120,7 @@ fun DeadlineItem(vehicle: Vehicle, record: MaintenanceRecord) {
                 }
                 if (kmRemaining != null) {
                     Text(
-                        text = if (kmRemaining < 0) "Kilométrage +" else "$kmRemaining ${units.distance} restants",
+                        text = if (kmRemaining < 0) "Kilométrage +" else "${com.carmanager.app.core.util.DistancePresentation.recorded(kmRemaining, units.distance)} restants",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (kmRemaining < 0) color else MaterialTheme.colorScheme.onSurfaceVariant
                     )

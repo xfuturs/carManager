@@ -30,7 +30,8 @@ class ReportsImportGuardTest {
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiEvent.toList(events) }
             vm.addDocument(mockk<Uri>(),"Imported.pdf",DocumentCategory.REPORTS); runCurrent()
             coVerify(exactly=0) { repo.saveDocument(any()) }
-            verify(exactly=0) { FileStorageHelper.saveFileToInternalStorage(any(),any()) }
+            verify(exactly=0) { FileStorageHelper.saveFileToInternalStorage(any(),any(),any()) }
+            coVerify(exactly=0) { garage.access.read<Any>(any(),any(),any()) }
             assertTrue(events.any { it is com.carmanager.app.core.util.UiEvent.ShowSnackbar && it.message.contains("Statistiques") })
         } finally { store.clear(); runCurrent(); unmockkObject(FileStorageHelper); Dispatchers.resetMain() }
     }

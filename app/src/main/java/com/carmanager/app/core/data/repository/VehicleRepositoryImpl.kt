@@ -15,7 +15,8 @@ class VehicleRepositoryImpl @Inject constructor(
     private val vehicleDao: VehicleDao,
     private val session: WorkspaceSession,
     private val access: OwnedDatabaseAccess,
-    private val writer: com.carmanager.app.core.data.local.LocalGarageWriter
+    private val writer: com.carmanager.app.core.data.local.LocalGarageWriter,
+    private val deletion: com.carmanager.app.core.data.local.VehicleFileDeletion? = null
 ) : VehicleRepository {
 
     override fun observeAll(): Flow<List<Vehicle>> {
@@ -35,6 +36,6 @@ class VehicleRepositoryImpl @Inject constructor(
     override suspend fun saveVehicle(vehicle: Vehicle): Long = writer.saveVehicle(vehicle)
 
     override suspend fun deleteVehicle(vehicle: Vehicle) {
-        access.write(vehicle.ownerKey, vehicle.id) { vehicleDao.delete(vehicle.toEntity()) }
+        checkNotNull(deletion).delete(vehicle)
     }
 }

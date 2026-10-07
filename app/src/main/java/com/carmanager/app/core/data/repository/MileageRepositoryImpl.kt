@@ -2,6 +2,7 @@ package com.carmanager.app.core.data.repository
 
 import com.carmanager.app.core.data.local.dao.MileageDao
 import com.carmanager.app.core.data.local.entity.MileageRecordEntity
+import com.carmanager.app.core.data.mapper.toDomain
 import com.carmanager.app.core.domain.model.MileageRecord
 import com.carmanager.app.core.domain.model.MileageSource
 import com.carmanager.app.core.domain.repository.MileageRepository
@@ -40,15 +41,6 @@ class MileageRepositoryImpl @Inject constructor(
         session.requireCurrent(owner)
         return result
     }
-
-    private fun MileageRecordEntity.toDomain(ownerKey: String) = MileageRecord(
-        id = id,
-        vehicleId = vehicleId,
-        date = date,
-        mileage = mileage,
-        source = MileageSource.valueOf(source),
-        ownerKey = ownerKey
-    )
 
     private fun MileageRecord.toEntity() = MileageRecordEntity(
         id = id,

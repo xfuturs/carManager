@@ -58,7 +58,7 @@ fun AddEditVehicleScreen(
                 backDescription = stringResource(R.string.cancel),
                 actions = {
                     if (viewModel.isEditMode) {
-                        IconButton(onClick = { showDeleteDialog = true }, enabled = !viewModel.isSaving && !viewModel.hasSaved) {
+                        IconButton(onClick = { showDeleteDialog = true }, enabled = !viewModel.isSaving && !viewModel.hasSaved && !viewModel.isVehicleLoading && viewModel.loadError == null) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = stringResource(R.string.delete),
@@ -66,7 +66,7 @@ fun AddEditVehicleScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { viewModel.save() }, enabled = !viewModel.isSaving && !viewModel.hasSaved) {
+                    IconButton(onClick = { viewModel.save() }, enabled = !viewModel.isSaving && !viewModel.hasSaved && !viewModel.isVehicleLoading && viewModel.loadError == null) {
                         Icon(Icons.Default.Check, contentDescription = stringResource(R.string.save))
                     }
                 }
@@ -74,6 +74,7 @@ fun AddEditVehicleScreen(
         }
     ) { padding ->
         FormScreenContent(padding) {
+            com.carmanager.app.core.ui.components.FormLoadFailure(viewModel.loadError, viewModel::retryLoading)
             FormSection("Identité") {
                 SearchableDropdown(
                     label = stringResource(R.string.vehicle_brand) + " *",
@@ -190,7 +191,7 @@ fun AddEditVehicleScreen(
                 }
             }
             FormSaveAction(stringResource(R.string.save),
-                enabled = !viewModel.isSaving && !viewModel.hasSaved,
+                enabled = !viewModel.isSaving && !viewModel.hasSaved && !viewModel.isVehicleLoading && viewModel.loadError == null,
                 onClick = { viewModel.save() })
         }
 

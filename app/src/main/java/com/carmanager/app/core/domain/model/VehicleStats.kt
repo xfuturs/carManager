@@ -2,7 +2,7 @@ package com.carmanager.app.core.domain.model
 
 data class VehicleStats(
     val vehicle: Vehicle,
-    val averageConsumption: Double = 0.0,
+    val averageConsumption: Double? = null,
     val totalFuelCost: Double = 0.0,
     val totalLiters: Double = 0.0,
     val fuelRecordsCount: Int = 0,
@@ -14,5 +14,10 @@ data class VehicleStats(
     val nextInsuranceDate: Long? = null,
     val consumptionHistory: List<Double> = emptyList(),
     val isCTDocMissing: Boolean = false,
-    val isInsuranceDocMissing: Boolean = false
-)
+    val isInsuranceDocMissing: Boolean = false,
+    val totalMaintenanceCost: Double = 0.0,
+    val relevantConsumptionSampleCount: Int = 0
+) {
+    val totalExpenses: Double get() = totalFuelCost + totalMaintenanceCost
+    val hasConsumption: Boolean get() = relevantConsumptionSampleCount >= 2 && averageConsumption != null
+}

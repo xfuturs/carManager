@@ -20,26 +20,21 @@ import java.io.IOException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashboardHydrationTest {
-    private class Snapshots {
+    private class Snapshots(private val owner: String) {
         val vehicles = MutableSharedFlow<List<Vehicle>>(replay = 1)
         val fuel = MutableSharedFlow<List<FuelRecord>>(replay = 1)
         val maintenance = MutableSharedFlow<List<MaintenanceRecord>>(replay = 1)
         val documents = MutableSharedFlow<List<Document>>(replay = 1)
-        val fuelTotal = MutableSharedFlow<Double>(replay = 1)
-        val maintenanceTotal = MutableSharedFlow<Double>(replay = 1)
-        val next = MutableSharedFlow<MaintenanceRecord?>(replay = 1)
-        fun emitSecondary(except: String? = null) {
-            fuel.tryEmit(emptyList()); documents.tryEmit(emptyList())
-            if (except != "maintenance") maintenance.tryEmit(emptyList())
-            if (except != "fuelTotal") fuelTotal.tryEmit(18.0)
-            maintenanceTotal.tryEmit(22.0)
-            if (except != "next") next.tryEmit(null)
+        fun emitSecondary(except: String? = null, vehicleId: Long = 1) {
+            if (except != "fuel") fuel.tryEmit(listOf(FuelRecord(vehicleId=vehicleId,date=java.time.Instant.parse("2026-10-01T12:00:00Z").toEpochMilli(),mileage=1000,liters=10.0,totalPrice=18.0,ownerKey=owner)))
+            if (except != "documents") documents.tryEmit(emptyList())
+            if (except != "maintenance") maintenance.tryEmit(listOf(MaintenanceRecord(vehicleId=vehicleId,type=MaintenanceType.OIL_CHANGE,date=java.time.Instant.parse("2026-10-01T12:00:00Z").toEpochMilli(),mileage=1000,cost=22.0,ownerKey=owner)))
         }
     }
 
-    private class Fixture {
+    private class Fixture(scheduler: TestCoroutineScheduler) {
         val session = WorkspaceSession(TestDeletionRegistry())
-        val sources = listOf(WorkspaceOwner.GUEST, "firebase:A", "firebase:B").associateWith { Snapshots() }
+        val sources = listOf(WorkspaceOwner.GUEST, "firebase:A", "firebase:B").associateWith { Snapshots(it) }
         val vehicles = mockk<VehicleRepository>()
         val fuel = mockk<FuelRepository>()
         val maintenance = mockk<MaintenanceRepository>()
@@ -53,10 +48,9 @@ class DashboardHydrationTest {
             every { fuel.observeAll() } answers { current().fuel }
             every { maintenance.observeAll() } answers { current().maintenance }
             every { documents.observeAll() } answers { current().documents }
-            every { fuel.observeMonthlyTotal(any()) } answers { current().fuelTotal }
-            every { maintenance.observeMonthlyTotal(any()) } answers { current().maintenanceTotal }
-            every { maintenance.observeNextUpcoming() } answers { current().next }
-            useCase = GetDashboardStatsUseCase(vehicles, fuel, maintenance, documents, session)
+            useCase = GetDashboardStatsUseCase(vehicles, fuel, maintenance, documents, session,
+                com.carmanager.app.features.dashboard.DashboardTimeSource({java.time.Instant.parse("2026-10-07T10:00:00Z")},{java.time.ZoneId.of("Europe/Paris")}),
+                StandardTestDispatcher(scheduler))
         }
         fun current() = sources.getValue(session.owner.value)
         fun vehicle(id: Long = 1) = Vehicle(id = id, brand = "Test", model = "Car", year = 2020,
@@ -65,7 +59,7 @@ class DashboardHydrationTest {
     }
 
     @Test fun `Dashboard unknown owner and unresolved vehicles never create fake zero summary`() = runTest {
-        val fixture = Fixture()
+        val fixture = Fixture(testScheduler)
         fixture.current().emitSecondary()
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
@@ -77,7 +71,7 @@ class DashboardHydrationTest {
     }
 
     @Test fun `first nonempty guest snapshot goes directly to coherent content`() = runTest {
-        val fixture = Fixture().apply { session.setAuthenticatedUid(null) }
+        val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid(null) }
         fixture.current().emitSecondary()
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
@@ -94,7 +88,7 @@ class DashboardHydrationTest {
     }
 
     @Test fun `first truly empty snapshot creates the real Empty dashboard`() = runTest {
-        val fixture = Fixture().apply { session.setAuthenticatedUid(null) }
+        val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid(null) }
         fixture.current().emitSecondary()
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
@@ -106,9 +100,9 @@ class DashboardHydrationTest {
         assertEquals(2, states.size)
     }
 
-    @Test fun `required deadline and total queries remain unresolved instead of showing fake final zeros`() = runTest {
-        for (delayed in listOf("maintenance", "fuelTotal", "next")) {
-            val fixture = Fixture().apply { session.setAuthenticatedUid("A") }
+    @Test fun `required history queries remain unresolved instead of showing fake final zeros`() = runTest {
+        for (delayed in listOf("maintenance", "fuel", "documents")) {
+            val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid("A") }
             fixture.current().emitSecondary(except = delayed)
             fixture.current().vehicles.emit(listOf(fixture.vehicle()))
             val states = mutableListOf<LocalDataState<DashboardStats>>()
@@ -117,9 +111,9 @@ class DashboardHydrationTest {
             }
             runCurrent(); assertEquals(listOf(LocalDataState.Loading), states)
             when (delayed) {
-                "maintenance" -> fixture.current().maintenance.emit(emptyList())
-                "fuelTotal" -> fixture.current().fuelTotal.emit(18.0)
-                "next" -> fixture.current().next.emit(null)
+                "maintenance" -> fixture.current().emitSecondary()
+                "fuel" -> fixture.current().emitSecondary()
+                "documents" -> fixture.current().emitSecondary()
             }
             runCurrent()
             val ready = states.last() as LocalDataState.Ready
@@ -131,7 +125,7 @@ class DashboardHydrationTest {
     }
 
     @Test fun `guest A B and logout rehydrate only the current owner's dashboard`() = runTest {
-        val fixture = Fixture()
+        val fixture = Fixture(testScheduler)
         fixture.sources.values.forEach { it.emitSecondary() }
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
@@ -143,11 +137,14 @@ class DashboardHydrationTest {
                     (states.last() as LocalDataState.Ready).owner == WorkspaceOwner.GUEST)
             } else assertEquals(LocalDataState.Loading, states.last())
             val vehicle = fixture.vehicle(index + 1L)
+            fixture.current().emitSecondary(vehicleId = vehicle.id)
             fixture.current().vehicles.emit(listOf(vehicle)); runCurrent()
             val ready = states.last() as LocalDataState.Ready
             assertEquals(WorkspaceOwner.fromUid(uid), ready.owner)
             assertEquals(vehicle, ready.data.vehicles.single().vehicle)
             assertEquals(1, ready.data.vehicleCount)
+            assertEquals(18.0, ready.data.monthlyFuelCost)
+            assertEquals(22.0, ready.data.monthlyMaintenanceCost)
         }
         assertTrue(states.filterIsInstance<LocalDataState.Ready<DashboardStats>>().all {
             it.data.vehicles.all { stats -> stats.vehicle.ownerKey == it.owner } && it.data.vehicleCount == 1
@@ -155,7 +152,7 @@ class DashboardHydrationTest {
     }
 
     @Test fun `Dashboard query failure is Error and an explicit retry rehydrates real data`() = runTest {
-        val fixture = Fixture().apply { session.setAuthenticatedUid("A"); fail = true }
+        val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid("A"); fail = true }
         val retry = MutableStateFlow(0)
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(retry).toList(states) }
@@ -170,7 +167,7 @@ class DashboardHydrationTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
-            val fixture = Fixture().apply { session.setAuthenticatedUid("A") }
+            val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid("A") }
             val settings = mockk<SettingsRepository>().also {
                 every { it.currency } returns flowOf("€")
                 every { it.distanceUnit } returns flowOf("km")

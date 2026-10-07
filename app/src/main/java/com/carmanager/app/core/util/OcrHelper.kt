@@ -15,16 +15,39 @@ object OcrHelper {
         val date: Long? = null
     )
 
-    suspend fun analyzeImage(context: Context, uri: Uri): OcrResult {
+    sealed interface Analysis {
+        data class Values(val result: OcrResult) : Analysis
+        data object NoValues : Analysis
+        data object Failed : Analysis
+    }
+    internal interface Recognizer {
+        suspend fun text(): String
+        fun close()
+    }
+    suspend fun analyzeImage(context: Context, uri: Uri): Analysis = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        analyze {
+            val image = InputImage.fromFilePath(context.applicationContext, uri)
+            val client = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            object : Recognizer {
+                override suspend fun text() = client.process(image).await().text
+                override fun close() = client.close()
+            }
+        }
+    }
+    internal suspend fun analyze(create: suspend () -> Recognizer): Analysis {
         return try {
-            val image = InputImage.fromFilePath(context, uri)
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            val result = recognizer.process(image).await()
-            
-            parseText(result.text)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            OcrResult()
+            val recognizer = create()
+            var failure: Throwable? = null
+            val result = try { parseText(recognizer.text()) }
+            catch (error: Throwable) { failure = error; throw error }
+            finally {
+                try { recognizer.close() }
+                catch (cleanup: Exception) { if (failure != null) failure.addSuppressed(cleanup) else throw cleanup }
+            }
+            if (result.totalPrice != null || result.liters != null || result.date != null) Analysis.Values(result) else Analysis.NoValues
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            Analysis.Failed
         }
     }
 

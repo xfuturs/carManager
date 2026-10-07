@@ -137,7 +137,7 @@ fun DocumentsScreen(
                     documents = documents,
                     isSearchResult = true,
                     onDelete = viewModel::requestDeletion,
-                    onOpen = { if (it.category == DocumentCategory.REPORTS) reportActions.open(it) else if (viewModel.canOpen(it)) openFile(context, it) },
+                    onOpen = { if (it.category == DocumentCategory.REPORTS) reportActions.open(it) else viewModel.openDocument(it) },
                     onSave = reportActions.save,
                     onShare = reportActions.share,
                     onConvertToPdf = viewModel::convertToPdf,
@@ -154,7 +154,7 @@ fun DocumentsScreen(
                 DocumentGridView(
                     documents = filteredDocs,
                     onDelete = viewModel::requestDeletion,
-                    onOpen = { if (it.category == DocumentCategory.REPORTS) reportActions.open(it) else if (viewModel.canOpen(it)) openFile(context, it) },
+                    onOpen = { if (it.category == DocumentCategory.REPORTS) reportActions.open(it) else viewModel.openDocument(it) },
                     onSave = reportActions.save,
                     onShare = reportActions.share,
                     isReportsFolder = selectedCategory == DocumentCategory.REPORTS,
@@ -357,35 +357,6 @@ private fun getCategoryIcon(category: DocumentCategory): ImageVector {
         DocumentCategory.CLAIMS -> Icons.Default.ReportProblem
         DocumentCategory.OTHER -> Icons.Default.Category
         DocumentCategory.REPORTS -> Icons.Default.PictureAsPdf
-    }
-}
-
-private fun openFile(context: Context, document: Document) {
-    try {
-        val file = File(document.filePath)
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-        
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, context.contentResolver.getType(uri) ?: getMimeType(document.filePath))
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        
-        context.startActivity(Intent.createChooser(intent, "Ouvrir avec"))
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-}
-
-private fun getMimeType(filePath: String): String {
-    return when {
-        filePath.endsWith(".pdf", true) -> "application/pdf"
-        filePath.endsWith(".jpg", true) || filePath.endsWith(".jpeg", true) -> "image/jpeg"
-        filePath.endsWith(".png", true) -> "image/png"
-        else -> "*/*"
     }
 }
 

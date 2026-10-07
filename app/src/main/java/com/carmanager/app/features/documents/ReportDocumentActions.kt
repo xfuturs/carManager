@@ -21,9 +21,8 @@ class ReportDocumentActions internal constructor(
     private val present: (File, Boolean) -> Unit
 ) {
     @Inject constructor(session: WorkspaceSession, access: OwnedDatabaseAccess, @ApplicationContext context: Context) :
-        this(session, { document -> access.write(document.ownerKey, document.vehicleId) {
-            access.documentFile(document.ownerKey, document.id, document.filePath, File(context.filesDir, "vehicle_documents"))
-        } }, { file, share -> if (share) PdfReportHelper.share(context, file) else PdfReportHelper.open(context, file) })
+        this(session, { document -> OwnedDocumentFileResolver(session, access, context).file(document) },
+            { file, share -> if (share) PdfReportHelper.share(context, file) else PdfReportHelper.open(context, file) })
     private suspend fun file(document: Document): File {
         session.requireCurrent(document.ownerKey)
         check(document.category == DocumentCategory.REPORTS)

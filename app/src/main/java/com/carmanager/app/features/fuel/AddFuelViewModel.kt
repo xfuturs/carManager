@@ -77,21 +77,40 @@ class AddFuelViewModel @Inject constructor(
     private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
+    var isVehicleLoading by mutableStateOf(false)
+        private set
+    var loadError by mutableStateOf<String?>(null)
+        private set
+    fun retryLoading() { loadCurrentVehicle() }
+
     var isVehicleLoaded by mutableStateOf(false)
         private set
 
-    init {
+    init { loadCurrentVehicle() }
+
+    private fun loadCurrentVehicle() {
+        if (isVehicleLoading) return
+        isVehicleLoading = true
+        isVehicleLoaded = false
+        loadError = null
         viewModelScope.launch {
-            vehicleRepository.observeById(vehicleId).firstOrNull()?.let { vehicle ->
+            try {
+                session.requireWritable(workspaceOwner)
+                val vehicle = vehicleRepository.observeById(vehicleId).firstOrNull()
+                    ?: error("Véhicule absent.")
+                session.requireWritable(workspaceOwner)
+                check(vehicle.ownerKey == workspaceOwner && vehicle.id == vehicleId)
                 tankCapacity = vehicle.tankCapacity
                 batteryCapacity = vehicle.batteryCapacity
                 fuelType = vehicle.fuelType
                 currentVehicleMileage = vehicle.currentMileage
                 isVehicleLoaded = true
-                mileage = ""
-                
-                isElectricEntry = (vehicle.fuelType == FuelType.ELECTRIC)
-            }
+                isElectricEntry = vehicle.fuelType == FuelType.ELECTRIC
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                loadError = "Véhicule indisponible. Réessayez ou rouvrez le formulaire."
+                _uiEvent.send(UiEvent.ShowSnackbar(loadError!!))
+            } finally { isVehicleLoading = false }
         }
     }
 
@@ -107,15 +126,26 @@ class AddFuelViewModel @Inject constructor(
     }
 
     fun onScanReceipt(uri: Uri) {
-        viewModelScope.launch {
+        if (isScanning) return
+        viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             isScanning = true
-            val result = OcrHelper.analyzeImage(context, uri)
-            
-            result.totalPrice?.let { totalPrice = "%.2f".format(it).replace(",", ".") }
-            result.liters?.let { liters = "%.2f".format(it).replace(",", ".") }
-            
-            isScanning = false
-            _uiEvent.send(UiEvent.ShowSnackbar("Analyse terminée"))
+            try {
+                session.requireWritable(workspaceOwner)
+                val result = OcrHelper.analyzeImage(context, uri)
+                session.requireWritable(workspaceOwner)
+                when (result) {
+                    is OcrHelper.Analysis.Values -> {
+                        result.result.totalPrice?.let { totalPrice = "%.2f".format(it).replace(",", ".") }
+                        result.result.liters?.let { liters = "%.2f".format(it).replace(",", ".") }
+                        _uiEvent.send(UiEvent.ShowSnackbar("Analyse terminée"))
+                    }
+                    OcrHelper.Analysis.NoValues -> _uiEvent.send(UiEvent.ShowSnackbar("Aucune valeur reconnue. Vous pouvez saisir les informations manuellement."))
+                    OcrHelper.Analysis.Failed -> _uiEvent.send(UiEvent.ShowSnackbar("Analyse impossible. Réessayez ou saisissez les informations manuellement."))
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar("Analyse impossible. Réessayez ou saisissez les informations manuellement."))
+            } finally { isScanning = false }
         }
     }
 

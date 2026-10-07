@@ -18,18 +18,7 @@ internal object ReportFileIO {
         return "Rapport_${safe}_${stamp}_$token.pdf"
     }
     fun create(directory: File, filename: String, render: (OutputStream) -> Unit): String {
-        check(directory.isDirectory || directory.mkdirs()) { "Stockage du rapport indisponible." }
-        val file = File(directory, filename)
-        check(file.canonicalFile.parentFile == directory.canonicalFile) { "Nom de rapport invalide." }
-        check(file.createNewFile()) { "Un rapport porte déjà ce nom." }
-        try {
-            file.outputStream().use(render)
-            check(file.length() > 0) { "Rapport PDF vide." }
-            return file.absolutePath
-        } catch (error: Throwable) {
-            if (file.exists() && !file.delete()) error.addSuppressed(IllegalStateException("Fichier incomplet non supprimé."))
-            throw error
-        }
+        return PrivateFileIO.create(directory, filename, render)
     }
     /** null = annulation normale. Une erreur de destination ne modifie jamais la source. */
     fun copy(source: File, destination: (() -> OutputStream?)?, requireCurrent: () -> Unit = {}): Boolean {

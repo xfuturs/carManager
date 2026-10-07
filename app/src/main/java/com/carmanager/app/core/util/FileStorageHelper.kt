@@ -6,88 +6,49 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import java.io.File
-import java.io.FileOutputStream
 import java.util.UUID
 
 object FileStorageHelper {
     private const val DOCUMENTS_DIR = "vehicle_documents"
-
     internal fun saveGeneratedPdf(context: Context, filename: String, render: (java.io.OutputStream) -> Unit): String =
         ReportFileIO.create(File(context.filesDir, DOCUMENTS_DIR), filename, render)
 
-    fun saveFileToInternalStorage(context: Context, uri: Uri): String? {
-        return try {
-            val contentResolver = context.contentResolver
-            
-            // Récupérer l'extension du fichier original
-            val mimeTypeMap = MimeTypeMap.getSingleton()
-            val extension = mimeTypeMap.getExtensionFromMimeType(contentResolver.getType(uri)) ?: "file"
-            
-            val inputStream = contentResolver.openInputStream(uri) ?: return null
-            
-            val dir = File(context.filesDir, DOCUMENTS_DIR)
-            if (!dir.exists()) {
-                dir.mkdirs()
-            }
-
-            val fileName = "doc_${UUID.randomUUID()}.$extension"
-            val file = File(dir, fileName)
-            
-            FileOutputStream(file).use { outputStream ->
-                inputStream.copyTo(outputStream)
-            }
-            
-            file.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+    /** Frontière IO du ViewModel, jamais une transaction Room. */
+    fun saveFileToInternalStorage(context: Context, uri: Uri, requireActive: () -> Unit = {}): String {
+        requireActive()
+        val resolver = context.contentResolver
+        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(resolver.getType(uri)) ?: "file"
+        return PrivateFileIO.copyNew(File(context.filesDir, DOCUMENTS_DIR), "doc_${UUID.randomUUID()}.$extension",
+            { resolver.openInputStream(uri) }, requireActive)
     }
 
-    fun convertImageToPdf(context: Context, imagePath: String): String? {
-        return try {
-            val bitmap = BitmapFactory.decodeFile(imagePath) ?: return null
-            
-            val pdfDocument = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
-            val page = pdfDocument.startPage(pageInfo)
-            
-            val canvas = page.canvas
-            canvas.drawBitmap(bitmap, 0f, 0f, null)
-            pdfDocument.finishPage(page)
-
-            val dir = File(context.filesDir, DOCUMENTS_DIR)
-            if (!dir.exists()) {
-                dir.mkdirs()
-            }
-
-            val fileName = "doc_${UUID.randomUUID()}.pdf"
-            val file = File(dir, fileName)
-            
-            FileOutputStream(file).use { outputStream ->
-                pdfDocument.writeTo(outputStream)
-            }
-            
-            pdfDocument.close()
-            bitmap.recycle()
-            
-            file.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+    fun convertImageToPdf(context: Context, imagePath: String, requireActive: () -> Unit = {}): String {
+        requireActive()
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(imagePath, bounds)
+        val plan = ImageDecodePlan.from(bounds.outWidth, bounds.outHeight)
+        requireActive()
+        val options = BitmapFactory.Options().apply { inSampleSize = plan.sampleSize }
+        val bitmap = BitmapFactory.decodeFile(imagePath, options) ?: error("Image illisible.")
+        try {
+            check(maxOf(bitmap.width, bitmap.height) <= ImageDecodePlan.MAX_LONG_EDGE) { "Image trop volumineuse." }
+            requireActive()
+            val pdf = PdfDocument()
+            try {
+                val page = pdf.startPage(PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create())
+                try { page.canvas.drawBitmap(bitmap, 0f, 0f, null) } finally { pdf.finishPage(page) }
+                requireActive()
+                return PrivateFileIO.create(File(context.filesDir, DOCUMENTS_DIR), "doc_${UUID.randomUUID()}.pdf") {
+                    requireActive()
+                    pdf.writeTo(it)
+                    requireActive()
+                }
+            } finally { pdf.close() }
+        } finally { bitmap.recycle() }
     }
 
-    fun deleteFile(path: String): Boolean {
-        return try {
-            val file = File(path)
-            if (file.exists()) {
-                file.delete()
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
+    fun deleteFile(path: String): Boolean = try {
+        val file = File(path)
+        !file.exists() || file.delete()
+    } catch (_: Exception) { false }
 }

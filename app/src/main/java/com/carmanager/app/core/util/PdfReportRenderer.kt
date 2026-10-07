@@ -23,7 +23,8 @@ import java.util.Locale
 import kotlin.math.ceil
 
 /** Présentation seulement ; les entrées, leur ordre et les contrats fichier/partage sont inchangés. */
-internal class PdfReportRenderer(private val context: Context) {
+internal class PdfReportRenderer(private val context: Context,
+    private val presentation: ReportPresentationSettings = ReportPresentationSettings()) {
     private val teal = Color.rgb(0, 106, 98)
     private val charcoal = Color.rgb(35, 43, 45)
     private val muted = Color.rgb(92, 103, 105)
@@ -33,7 +34,7 @@ internal class PdfReportRenderer(private val context: Context) {
     private val width = PdfReportGeometry.CONTENT_WIDTH
     private val right = left + width
     private val missing = "Non renseigné"
-    // Le contrat PDF historique ne reçoit pas les préférences monétaires/distance : conserver €/km.
+    // Kilométrages historiques sans métadonnée d’unité : conserver la convention PDF km, sans conversion.
     private val integers = NumberFormat.getIntegerInstance(Locale.FRANCE)
     private val money = NumberFormat.getNumberInstance(Locale.FRANCE).apply {
         minimumFractionDigits = 2; maximumFractionDigits = 2
@@ -73,7 +74,7 @@ internal class PdfReportRenderer(private val context: Context) {
         block(listOf(PdfColumn(left, width, lines(text, style, width))), kind, gap = gap,
             bottom = if (kind == PdfBlockKind.SECTION) 6f else 0f)
     private fun date(value: Long) = dates.format(Date(value))
-    private fun mileage(value: Int) = "${integers.format(value)} km"
+    private fun mileage(value: Int) = presentation.mileage(value)
     private fun identity(vehicle: Vehicle) = listOf(vehicle.brand, vehicle.model).filter { it.isNotBlank() }.joinToString(" ").ifBlank { missing }
 
     fun render(document: PdfDocument, vehicle: Vehicle, records: List<MaintenanceRecord>,
@@ -138,8 +139,8 @@ internal class PdfReportRenderer(private val context: Context) {
         }
         val selected = StructuredReportRows.selectedSections(sections) { section -> when (section) {
             ReportSection.VEHICLE_INFORMATION -> info
-            ReportSection.MILEAGE_HISTORY -> structured(section, StructuredReportRows.mileage(mileageRecords), "Aucun relevé kilométrique enregistré.")
-            ReportSection.FUEL_AND_CHARGING_HISTORY -> structured(section, StructuredReportRows.fuel(fuelRecords), "Aucun plein ni recharge enregistré.")
+            ReportSection.MILEAGE_HISTORY -> structured(section, StructuredReportRows.mileage(mileageRecords, presentation), "Aucun relevé kilométrique enregistré.")
+            ReportSection.FUEL_AND_CHARGING_HISTORY -> structured(section, StructuredReportRows.fuel(fuelRecords, presentation), "Aucun plein ni recharge enregistré.")
             ReportSection.MAINTENANCE_HISTORY -> maintenance
         } }
         val plan = PdfPagePlanner().plan(leading, selected)
@@ -179,7 +180,7 @@ internal class PdfReportRenderer(private val context: Context) {
             PdfColumn(left, 65f, lines(date(record.date), PdfTextStyle.BODY, 65f)),
             PdfColumn(left + 77f, 246f, operation),
             PdfColumn(left + 339f, 80f, lines(mileage(record.mileage), PdfTextStyle.BODY, 80f), true),
-            PdfColumn(left + 433f, 86f, lines("${money.format(record.cost)} €", PdfTextStyle.BODY, 86f), true)
+            PdfColumn(left + 433f, 86f, lines(CurrencyPresentation.format(record.cost, presentation.currencySymbol), PdfTextStyle.BODY, 86f), true)
         ), PdfBlockKind.RECORD, top = 9f, bottom = 9f)
     }
 

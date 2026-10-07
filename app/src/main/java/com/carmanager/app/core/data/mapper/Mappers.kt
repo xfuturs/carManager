@@ -14,6 +14,10 @@ import com.carmanager.app.core.domain.model.VehicleType
 
 // --- Vehicle Mappers ---
 
+fun com.carmanager.app.core.data.local.entity.MileageRecordEntity.toDomain(ownerKey: String) =
+    com.carmanager.app.core.domain.model.MileageRecord(id, vehicleId, date, mileage,
+        com.carmanager.app.core.domain.model.MileageSource.valueOf(source), ownerKey)
+
 fun VehicleEntity.toDomain(): Vehicle = Vehicle(
     id = id,
     brand = brand,

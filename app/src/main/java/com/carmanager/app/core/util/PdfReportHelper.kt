@@ -16,11 +16,12 @@ import java.io.File
 object PdfReportHelper {
     fun generate(context: Context, vehicle: Vehicle, fuelRecords: List<FuelRecord>,
         maintenanceRecords: List<MaintenanceRecord>, date: Long,
-        mileageRecords: List<MileageRecord> = emptyList(), sections: Set<ReportSection> = ReportSection.entries.toSet()): String {
+        mileageRecords: List<MileageRecord> = emptyList(), sections: Set<ReportSection> = ReportSection.entries.toSet(),
+        presentation: ReportPresentationSettings = ReportPresentationSettings()): String {
         require(sections.isNotEmpty())
         val pdf = PdfDocument()
         try {
-            PdfReportRenderer(context).render(pdf, vehicle, maintenanceRecords, fuelRecords, mileageRecords, sections, date)
+            PdfReportRenderer(context, presentation).render(pdf, vehicle, maintenanceRecords, fuelRecords, mileageRecords, sections, date)
             return FileStorageHelper.saveGeneratedPdf(context,
                 ReportFileIO.filename("${vehicle.brand}_${vehicle.model}", date)) { pdf.writeTo(it) }
         } catch (error: Exception) {

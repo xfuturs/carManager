@@ -119,13 +119,21 @@ class SettingsViewModel internal constructor(
 
     fun setCurrency(newCurrency: String) {
         viewModelScope.launch {
-            settingsRepository.setCurrency(newCurrency)
+            try { settingsRepository.setCurrency(newCurrency) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _preferenceEvents.send("Devise non enregistrée. Réessayez.")
+            }
         }
     }
 
     fun setDistanceUnit(newUnit: String) {
         viewModelScope.launch {
-            settingsRepository.setDistanceUnit(newUnit)
+            try { settingsRepository.setDistanceUnit(newUnit) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _preferenceEvents.send("Unité de distance non enregistrée. Réessayez.")
+            }
         }
     }
 }

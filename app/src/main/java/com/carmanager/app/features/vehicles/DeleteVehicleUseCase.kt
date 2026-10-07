@@ -7,7 +7,8 @@ import javax.inject.Inject
 class DeleteVehicleUseCase @Inject constructor(
     private val repository: VehicleRepository
 ) {
-    suspend operator fun invoke(vehicle: Vehicle) {
-        repository.deleteVehicle(vehicle)
+    suspend operator fun invoke(vehicle: Vehicle): String? {
+        return try { repository.deleteVehicle(vehicle); null }
+        catch (warning: com.carmanager.app.core.data.local.VehicleCleanupPendingException) { warning.message }
     }
 }

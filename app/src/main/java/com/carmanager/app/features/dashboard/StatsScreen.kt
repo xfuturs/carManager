@@ -2,6 +2,11 @@
 
 package com.carmanager.app.features.dashboard
 
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -38,20 +43,26 @@ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(onNavigateBack: () -> Unit, viewModel: DashboardViewModel = hiltViewModel()) {
-    val state by viewModel.uiState.collectAsState()
-    val isPremium by viewModel.isPremium.collectAsState()
+    DashboardLifecycle(viewModel)
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val isPremium by viewModel.isPremium.collectAsStateWithLifecycle()
     val units = LocalAppUnits.current
     val snackbar = remember { SnackbarHostState() }
     val reportActions = com.carmanager.app.features.documents.reportUiActions(snackbar)
-    val generatedReport by viewModel.generatedReport.collectAsState()
-    val draft by viewModel.reportDraft.collectAsState()
+    val generatedReport by viewModel.generatedReport.collectAsStateWithLifecycle()
+    val draft by viewModel.reportDraft.collectAsStateWithLifecycle()
     draft?.let { ReportConfigurationDialog(it, viewModel::toggleReportSection, viewModel::cancelReportDraft, {
         if (isPremium || BuildConfig.DEBUG) viewModel.confirmReportDraft()
         else viewModel.cancelReportDraft()
     }) }
-    LaunchedEffect(viewModel) { viewModel.uiEvent.collect { event ->
-        if (event is com.carmanager.app.core.util.UiEvent.ShowSnackbar) snackbar.showSnackbar(event.message)
-    } }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.uiEvent.collect { event ->
+                if (event is com.carmanager.app.core.util.UiEvent.ShowSnackbar) snackbar.showSnackbar(event.message)
+            }
+        }
+    }
     generatedReport?.let { report ->
         AlertDialog(onDismissRequest = viewModel::closeReportResult,
             title = { Text("Rapport enregistré dans Car Manager") },
@@ -76,8 +87,8 @@ fun StatsScreen(onNavigateBack: () -> Unit, viewModel: DashboardViewModel = hilt
                     item { SecondarySectionTitle("Dépenses ce mois") }
                     item {
                         StatsMetricGroup {
-                            StatsMetric("Carburant", "%.2f".format(stats.monthlyFuelCost) + " " + units.currency)
-                            StatsMetric("Entretien", "%.2f".format(stats.monthlyMaintenanceCost) + " " + units.currency)
+                            StatsMetric("Carburant", com.carmanager.app.core.util.CurrencyPresentation.format(stats.monthlyFuelCost, units.currency))
+                            StatsMetric("Entretien", com.carmanager.app.core.util.CurrencyPresentation.format(stats.monthlyMaintenanceCost, units.currency))
                         }
                     }
                     item { SecondarySectionTitle("Performance par véhicule") }
@@ -94,14 +105,14 @@ fun StatsScreen(onNavigateBack: () -> Unit, viewModel: DashboardViewModel = hilt
 fun VehicleStatsSummary(stats: com.carmanager.app.core.domain.model.VehicleStats, isPremium: Boolean, onGenerateReport: () -> Unit) {
     val vehicle = stats.vehicle
     val units = LocalAppUnits.current
-    val fuelUnit = if (vehicle.fuelType == FuelType.ELECTRIC) "kWh/100" else "L/100"
+    val fuelUnit = if (vehicle.fuelType == FuelType.ELECTRIC) "kWh/100 km" else "L/100 km"
 
     SecondaryPanel {
         SecondarySectionTitle("${vehicle.brand} ${vehicle.model}")
         StatsMetricGroup {
-            StatsMetric("Consommation moyenne", if (stats.fuelRecordsCount > 1) "%.1f".format(stats.averageConsumption) + " " + fuelUnit else "-- $fuelUnit")
-            StatsMetric("Dépenses totales", "%.0f".format(stats.totalFuelCost + stats.yearlyMaintenanceCost) + " " + units.currency)
-            StatsMetric("Distance", "${stats.distanceTracked} ${units.distance}")
+            StatsMetric("Consommation moyenne", VehicleStatsPresentation.consumption(stats))
+            StatsMetric("Dépenses totales", com.carmanager.app.core.util.CurrencyPresentation.format(stats.totalExpenses, units.currency, 0))
+            StatsMetric("Distance", com.carmanager.app.core.util.DistancePresentation.recorded(stats.distanceTracked, units.distance))
         }
         Text("Dernier relevé : ${DateFormatter.formatShort(vehicle.updatedAt)}", style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)

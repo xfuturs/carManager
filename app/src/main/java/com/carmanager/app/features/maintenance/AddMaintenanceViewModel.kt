@@ -78,6 +78,12 @@ class AddMaintenanceViewModel @Inject constructor(
     private var awaitingNotificationPermission = false
     private var postSaveWarning: String? = null
 
+    var isVehicleLoading by mutableStateOf(false)
+        private set
+    var loadError by mutableStateOf<String?>(null)
+        private set
+    fun retryLoading() { loadCurrentVehicle() }
+
     var isVehicleLoaded by mutableStateOf(false)
         private set
 
@@ -92,16 +98,28 @@ class AddMaintenanceViewModel @Inject constructor(
             }
         }
         
-        loadCurrentMileage()
+        loadCurrentVehicle()
     }
 
-    private fun loadCurrentMileage() {
+    private fun loadCurrentVehicle() {
+        if (isVehicleLoading) return
+        isVehicleLoading = true
+        isVehicleLoaded = false
+        loadError = null
         viewModelScope.launch {
-            vehicleRepository.observeById(vehicleId).firstOrNull()?.let { vehicle ->
+            try {
+                session.requireWritable(workspaceOwner)
+                val vehicle = vehicleRepository.observeById(vehicleId).firstOrNull()
+                    ?: error("Véhicule absent.")
+                session.requireWritable(workspaceOwner)
+                check(vehicle.ownerKey == workspaceOwner && vehicle.id == vehicleId)
                 currentVehicleMileage = vehicle.currentMileage
                 isVehicleLoaded = true
-                mileage = "" // Optionnel par défaut
-            }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                loadError = "Véhicule indisponible. Réessayez ou rouvrez le formulaire."
+                _uiEvent.send(UiEvent.ShowSnackbar(loadError!!))
+            } finally { isVehicleLoading = false }
         }
     }
 
@@ -133,15 +151,25 @@ class AddMaintenanceViewModel @Inject constructor(
     }
 
     fun onScanReceipt(uri: Uri) {
-        viewModelScope.launch {
+        if (isScanning) return
+        viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             isScanning = true
-            val result = OcrHelper.analyzeImage(context, uri)
-            
-            // Pour l'entretien on cherche surtout le prix
-            result.totalPrice?.let { cost = "%.2f".format(it).replace(",", ".") }
-            
-            isScanning = false
-            _uiEvent.send(UiEvent.ShowSnackbar("Analyse terminée"))
+            try {
+                session.requireWritable(workspaceOwner)
+                val result = OcrHelper.analyzeImage(context, uri)
+                session.requireWritable(workspaceOwner)
+                when (result) {
+                    is OcrHelper.Analysis.Values -> {
+                        result.result.totalPrice?.let { cost = "%.2f".format(it).replace(",", ".") }
+                        _uiEvent.send(UiEvent.ShowSnackbar("Analyse terminée"))
+                    }
+                    OcrHelper.Analysis.NoValues -> _uiEvent.send(UiEvent.ShowSnackbar("Aucune valeur reconnue. Vous pouvez saisir les informations manuellement."))
+                    OcrHelper.Analysis.Failed -> _uiEvent.send(UiEvent.ShowSnackbar("Analyse impossible. Réessayez ou saisissez les informations manuellement."))
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiEvent.send(UiEvent.ShowSnackbar("Analyse impossible. Réessayez ou saisissez les informations manuellement."))
+            } finally { isScanning = false }
         }
     }
 

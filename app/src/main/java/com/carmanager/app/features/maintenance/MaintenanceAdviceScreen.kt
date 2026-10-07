@@ -30,7 +30,7 @@ fun MaintenanceAdviceScreen(
     onNavigateBack: () -> Unit,
     viewModel: MaintenanceAdviceViewModel = hiltViewModel()
 ) {
-    val vehicle by viewModel.vehicle.collectAsState()
+    val state by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -40,10 +40,11 @@ fun MaintenanceAdviceScreen(
             )
         }
     ) { padding ->
+        com.carmanager.app.core.ui.components.LocalDataContent(state, viewModel::retryLoading, Modifier.padding(padding)) { vehicle ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                ,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -82,11 +83,12 @@ fun MaintenanceAdviceScreen(
                 }
             } ?: item {
                 Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    Text("Ce véhicule n'est plus disponible dans cet espace.")
                 }
             }
             
 
+        }
         }
     }
 }
