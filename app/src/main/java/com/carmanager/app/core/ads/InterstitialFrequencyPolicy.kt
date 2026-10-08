@@ -8,7 +8,9 @@ internal enum class InterstitialDecision {
     NotDueYet, DueButUnsafeRoute, DueButModalActive, DueButImeVisible,
     DueButActivityUnavailable, DueButTransitionActive, DueButBlockingFlow,
     Premium, ConsentUnavailable, SdkUnavailable, PremiumUnsettled, AdsUnavailable, NotLoaded, LoadBackoff, Showing,
-    EligibleToShow, AdLoaded, LoadFailed, ShowFailed, ActuallyDisplayed
+    EligibleToShow, AdLoaded, LoadFailed, ShowFailed, ActuallyDisplayed,
+    DueAwaitingNaturalBreak, NaturalBreakAccepted, NaturalBreakRejected,
+    NaturalBreakExpired, AdNotReadyAtBreak
 }
 
 internal fun interstitialGateDecision(ready: Boolean, consent: Boolean, premium: Boolean,

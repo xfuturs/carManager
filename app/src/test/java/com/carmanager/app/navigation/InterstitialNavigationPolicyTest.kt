@@ -17,7 +17,7 @@ class InterstitialNavigationPolicyTest {
         }
     }
     @Test fun loginPrivacyImportsHistoriesAndPermissionsAreProtected() {
-        for(route in listOf(Screen.Login.route,Screen.PrivacyPolicy.route,Screen.Documents.route,Screen.FuelList.route,
+        for(route in listOf(Screen.Login.route,Screen.PrivacyPolicy.route,Screen.Documents.route,
             Screen.MaintenanceList.route,Screen.MileageHistory.route,Screen.MaintenanceAdvice.route,Screen.Deadlines.route)) {
             assertFalse(InterstitialNavigationPolicy.isSafeRoute(route),route)
         }
@@ -25,8 +25,9 @@ class InterstitialNavigationPolicyTest {
     @Test fun unknownNullAndSubstringLookalikesFailClosed() {
         for(route in listOf(null,"","unknown","dashboard/extra","dashboard?dialog=true")) assertFalse(InterstitialNavigationPolicy.isSafeRoute(route))
     }
+    @Test fun fuelHistoryIsPresentableOnlyWithSeparateCompletedSavePermit() { assertTrue(InterstitialNavigationPolicy.isSafeRoute(Screen.FuelList.route)) }
     @Test fun reportGenerationAndResultScreensAreUnsafe() { assertFalse(InterstitialNavigationPolicy.isSafeRoute(Screen.Stats.route)) }
-    @Test fun returnFromAFormCanReleaseDeferredDueOnDashboard() {
+    @Test fun dashboardSafetyDoesNotEstablishANaturalBreak() {
         assertFalse(InterstitialNavigationPolicy.isSafeRoute(Screen.VehicleEdit.route))
         assertTrue(InterstitialNavigationPolicy.isSafeRoute(Screen.Dashboard.route))
     }

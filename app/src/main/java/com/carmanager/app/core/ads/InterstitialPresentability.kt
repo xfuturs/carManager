@@ -12,7 +12,8 @@ internal data class InterstitialPresentability(
     val windowFocused: Boolean = false,
     val imeVisible: Boolean = true,
     val modalActive: Boolean = false,
-    val blockingFlow: Boolean = false
+    val blockingFlow: Boolean = false,
+    val destinationId: String? = null
 ) {
     // Un dialogue de l'app est interactif mais ne constitue jamais une surface publicitaire.
     val interactiveForeground: Boolean get() = hostResumed && destinationResumed && (windowFocused || modalActive)

@@ -39,9 +39,11 @@ class InterstitialAdManager @Inject constructor(
     private val clock = MonotonicClock { SystemClock.elapsedRealtime() }
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     internal val changes = _changes.asSharedFlow()
-    private val coordinator = InterstitialCoordinator<InterstitialAd>(InterstitialFrequencyPolicy(clock), clock, ::load) { _changes.tryEmit(Unit) }
+    private val coordinator = InterstitialCoordinator<InterstitialAd>(InterstitialFrequencyPolicy(clock), clock, ::load,
+        changed = { _changes.tryEmit(Unit) }, diagnostic = { logInterstitialDecision(it) })
     private var globalAdsEligible = false
-    private var lastDecision = InterstitialDecision.AdsUnavailable
+    private var hostGeneration = 0L
+    private var hostBlocked = false
 
     private fun liveDecision(): InterstitialDecision {
         val entitlement = entitlementGate.decision(premium.state.value)
@@ -54,6 +56,7 @@ class InterstitialAdManager @Inject constructor(
     @MainThread
     fun updateEligibility(globalAdsEligible: Boolean) {
         val changed = this.globalAdsEligible != globalAdsEligible
+        if (changed && !globalAdsEligible) hostGeneration++
         this.globalAdsEligible = globalAdsEligible
         coordinator.updateEligibility(globalAdsEligible && liveAdsAllowed())
         if (changed) _changes.tryEmit(Unit)
@@ -64,7 +67,7 @@ class InterstitialAdManager @Inject constructor(
     }
 
     @MainThread
-    fun detachHost() { coordinator.detachHost() }
+    fun detachHost() { hostGeneration++; coordinator.detachHost() }
 
     @MainThread
     internal fun pauseForeground() { coordinator.frequency.setForeground(false) }
@@ -72,30 +75,50 @@ class InterstitialAdManager @Inject constructor(
     @MainThread
     internal fun updateForeground(state: InterstitialPresentability) {
         val allowed = globalAdsEligible && liveAdsAllowed()
+        val blocked = !allowed || !state.hostResumed || !state.windowFocused || state.modalActive || state.blockingFlow
+        if (blocked && !hostBlocked) hostGeneration++
+        hostBlocked = blocked
         coordinator.updateEligibility(allowed)
         coordinator.frequency.setForeground(allowed && state.interactiveForeground && !coordinator.isShowing)
     }
 
-    /** Échéance cadence/backoff uniquement ; un dû bloqué attend un changement d'état. */
-    internal fun nextWakeDelay(): Long? {
-        if (!coordinator.frequency.isForeground || coordinator.isShowing || !globalAdsEligible || !liveAdsAllowed()) return null
-        val deferredBySafety = lastDecision !in setOf(InterstitialDecision.NotLoaded, InterstitialDecision.LoadBackoff,
-            InterstitialDecision.ShowFailed, InterstitialDecision.EligibleToShow)
-        return coordinator.nextWakeDelay(deferredBySafety)
-    }
+    /** Le scheduler ne sait que comptabiliser, précharger et annoncer l'éligibilité. */
+    internal fun nextWakeDelay(): Long? = coordinator.nextWakeDelay(dueBlocked = false)
 
-    private fun record(reason: InterstitialDecision, code: Int? = null) { lastDecision = reason; logInterstitialDecision(reason, code) }
+    private fun record(reason: InterstitialDecision, code: Int? = null) { logInterstitialDecision(reason, code) }
 
     @MainThread
-    internal fun onTimedOpportunity(activity: ComponentActivity, state: InterstitialPresentability) {
+    internal fun onClockOrHostChanged(state: InterstitialPresentability) {
+        updateForeground(state)
+        coordinator.preload()
+        record(when {
+            !globalAdsEligible -> InterstitialDecision.AdsUnavailable
+            !liveAdsAllowed() -> liveDecision()
+            coordinator.isShowing -> InterstitialDecision.Showing
+            coordinator.frequency.isDue -> InterstitialDecision.DueAwaitingNaturalBreak
+            else -> InterstitialDecision.NotDueYet
+        })
+    }
+
+    internal fun captureHostGeneration(): Long = hostGeneration
+
+    internal fun createNaturalBreak(workflow: NaturalBreakWorkflow, completedAtMs: Long, destinationId: String,
+        capturedGeneration: Long = hostGeneration) = NaturalBreakOpportunity(workflow, completedAtMs, destinationId, capturedGeneration)
+
+    @MainThread
+    internal fun userInteraction() { hostGeneration++ }
+
+    @MainThread
+    internal fun discardCompletion(expired: Boolean = false) {
+        record(if (expired) InterstitialDecision.NaturalBreakExpired else InterstitialDecision.NaturalBreakRejected)
+    }
+
+    @MainThread
+    internal fun onNaturalBreak(activity: ComponentActivity, state: InterstitialPresentability, opportunity: NaturalBreakOpportunity) {
         val gate = liveDecision()
-        if (gate != InterstitialDecision.EligibleToShow) {
-            coordinator.updateEligibility(false); record(gate); return
-        }
-        if (!globalAdsEligible) { coordinator.updateEligibility(false); record(InterstitialDecision.AdsUnavailable); return }
+        if (!globalAdsEligible || gate != InterstitialDecision.EligibleToShow) coordinator.updateEligibility(false)
         val view = activity.window.decorView
         val imeVisible = ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) != false
-        // Dernière vérification réelle du host, sans faire confiance à un snapshot de composition seul.
         val fresh = state.copy(
             hostResumed = state.hostResumed && activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                 !activity.isFinishing && !activity.isDestroyed,
@@ -103,10 +126,15 @@ class InterstitialAdManager @Inject constructor(
             imeVisible = state.imeVisible || imeVisible
         )
         updateForeground(fresh)
-        if (coordinator.isShowing) { record(InterstitialDecision.Showing); return }
-        if (!coordinator.frequency.isDue) { coordinator.preload(); record(InterstitialDecision.NotDueYet); return }
-        fresh.blocker()?.let { record(it); return }
-        val reason = coordinator.onOpportunity(true) { ad, callbacks ->
+        val reason = coordinator.onOpportunity(opportunity, blocker = {
+            when {
+                opportunity.hostGeneration != hostGeneration || opportunity.destinationId != fresh.destinationId ||
+                    fresh.route != com.carmanager.app.core.ui.navigation.Screen.FuelList.route -> InterstitialDecision.NaturalBreakRejected
+                gate != InterstitialDecision.EligibleToShow -> gate
+                !globalAdsEligible -> InterstitialDecision.AdsUnavailable
+                else -> fresh.blocker()
+            }
+        }) { ad, callbacks ->
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdShowedFullScreenContent() { callbacks.shown(); logInterstitialDecision(InterstitialDecision.ActuallyDisplayed) }
                 override fun onAdDismissedFullScreenContent() {

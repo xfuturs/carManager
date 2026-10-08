@@ -45,7 +45,7 @@ class FormErrorBoundaryTest {
     }
     @AfterEach fun cleanup() { store.clear(); Dispatchers.resetMain() }
     private fun vehicle()=AddEditVehicleViewModel(SaveVehicleUseCase(vehicles),DeleteVehicleUseCase(vehicles),vehicles,references,context,garage.session,handle).also { store.put("vehicle",it) }
-    private fun fuel()=AddFuelViewModel(SaveFuelRecordUseCase(fuel),vehicles,context,garage.session,handle).also { store.put("fuel",it) }
+    private fun fuel()=AddFuelViewModel(SaveFuelRecordUseCase(fuel),vehicles,context,garage.session,handle, completionClock = mockk { every { now() } returns 0L }).also { store.put("fuel",it) }
     private fun maintenance()=AddMaintenanceViewModel(SaveMaintenanceUseCase(maintenance,vehicles,garage.session,context),vehicles,context,garage.session,handle).also { store.put("maintenance",it) }
     @Test fun `vehicle database load exception is terminal sanitized and retryable`()=runTest(dispatcher) {
         source=flow { throw IOException("raw path SQLite") }; val vm=vehicle(); runCurrent()

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material3.*
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -34,10 +35,17 @@ import com.carmanager.app.core.util.UiEvent
 @Composable
 fun AddFuelScreen(
     onNavigateBack: () -> Unit,
-    viewModel: AddFuelViewModel = hiltViewModel()
+    viewModel: AddFuelViewModel = hiltViewModel(),
+    onSaveCompleted: (CompletedFuelSave) -> Unit = { onNavigateBack() }
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val units = LocalAppUnits.current
+    val completionHost = remember { Any() }
+    val completionCallback by androidx.compose.runtime.rememberUpdatedState(onSaveCompleted)
+    androidx.compose.runtime.DisposableEffect(viewModel, completionHost) {
+        viewModel.bindCompletionHost(completionHost)
+        onDispose { viewModel.unbindCompletionHost(completionHost) }
+    }
 
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -48,7 +56,10 @@ fun AddFuelScreen(
     LaunchedEffect(key1 = true) {
         viewModel.uiEvent.collect { event ->
             when (event) {
-                is UiEvent.Success -> onNavigateBack()
+                is UiEvent.Success -> {
+                    val completion = viewModel.consumeCompletedSave(completionHost)
+                    if (completion == null) onNavigateBack() else completionCallback(completion)
+                }
                 is UiEvent.ShowSnackbar -> {
                     snackbarHostState.showSnackbar(message = event.message)
                 }

@@ -29,6 +29,7 @@ class InterstitialSchedulerTest {
                         val allowed=entitlement.value==AdsEntitlement.AllowedFree && consent.value
                         coordinator.updateEligibility(allowed)
                         frequency.setForeground(allowed && state.value.interactiveForeground && !coordinator.isShowing)
+                        coordinator.preload()
                         reason=when {
                             entitlement.value==AdsEntitlement.BlockedPremium -> InterstitialDecision.Premium
                             entitlement.value==AdsEntitlement.BlockedUnsettled -> InterstitialDecision.PremiumUnsettled
@@ -36,26 +37,29 @@ class InterstitialSchedulerTest {
                             coordinator.isShowing -> InterstitialDecision.Showing
                             !frequency.isDue -> { coordinator.preload(); InterstitialDecision.NotDueYet }
                             state.value.blocker()!=null -> state.value.blocker()!!
-                            else -> coordinator.onOpportunity(true) { _,callbacks -> displays+=callbacks }
+                            else -> InterstitialDecision.DueAwaitingNaturalBreak
                         }
-                    },nextDelay={ coordinator.nextWakeDelay(reason!=InterstitialDecision.NotLoaded && reason!=InterstitialDecision.LoadBackoff) })
+                    },nextDelay={ coordinator.nextWakeDelay(false) })
                 } finally { frequency.setForeground(false) }
             }
         }
+        fun opportunity() = coordinator.onOpportunity(
+            NaturalBreakOpportunity(NaturalBreakWorkflow.FuelRecordSaved, scope.testScheduler.currentTime, "history", 0),
+            { state.value.blocker() }) { _, callbacks -> displays += callbacks }
         fun loaded() { loads.last().first("ad") }
         fun failLoad() { loads.last().second() }
         fun finishDisplay() { displays.last().shown(); displays.last().dismissed() }
     }
-    @Test fun firstTimerShowsOnIdleDashboardWithZeroNavigation()=runTest {
+    @Test fun firstTimerNeverShowsOnIdleDashboardWithoutNaturalBreak()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent()
         advanceTimeBy(59_999L); runCurrent(); assertTrue(h.displays.isEmpty())
-        advanceTimeBy(1L); runCurrent(); assertEquals(1,h.displays.size); assertEquals(0L,h.frequency.shownCount)
+        advanceTimeBy(1L); runCurrent(); assertTrue(h.displays.isEmpty()); assertTrue(h.frequency.isDue); assertEquals(0L,h.frequency.shownCount)
     }
     @Test fun exactProgressiveTimersContinueBeyondTenDisplays()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent()
         repeat(10) { index ->
             advanceTimeBy(delayAfterDisplayedCount(index.toLong())); runCurrent()
-            assertEquals(index+1,h.displays.size)
+            assertEquals(index,h.displays.size); h.opportunity(); assertEquals(index+1,h.displays.size)
             h.finishDisplay(); h.loaded(); runCurrent()
         }
         assertEquals(10L,h.frequency.shownCount); assertEquals(180_000L,h.frequency.remainingMs)
@@ -65,29 +69,29 @@ class InterstitialSchedulerTest {
         h.state.value=h.state.value.copy(hostResumed=false); runCurrent(); advanceTimeBy(600_000L); runCurrent()
         assertTrue(h.displays.isEmpty()); assertEquals(30_000L,h.frequency.remainingMs)
         h.state.value=h.state.value.copy(hostResumed=true); runCurrent(); advanceTimeBy(29_999L); runCurrent()
-        assertTrue(h.displays.isEmpty()); advanceTimeBy(1L); runCurrent(); assertEquals(1,h.displays.size)
+        assertTrue(h.displays.isEmpty()); advanceTimeBy(1L); runCurrent(); assertTrue(h.displays.isEmpty())
     }
-    @Test fun dueOnFormShowsImmediatelyAfterSafeRouteEvent()=runTest {
+    @Test fun dueOnFormNeverShowsAfterUnrelatedSafeRouteEvent()=runTest {
         val h=Harness(this); h.state.value=h.state.value.copy(route="vehicle/edit"); runCurrent(); h.loaded(); runCurrent()
         advanceTimeBy(60_000L); runCurrent(); assertTrue(h.displays.isEmpty()); assertTrue(h.frequency.isDue)
         assertEquals(InterstitialDecision.DueButUnsafeRoute,h.reason)
-        h.state.value=h.state.value.copy(route="dashboard"); runCurrent(); assertEquals(1,h.displays.size)
+        h.state.value=h.state.value.copy(route="dashboard"); runCurrent(); assertTrue(h.displays.isEmpty())
     }
-    @Test fun modalDeferralDoesNotDiscardDueAndCloseWakesScheduler()=runTest {
+    @Test fun modalCloseNeverPresentsWithoutFreshNaturalBreak()=runTest {
         val h=Harness(this); h.state.value=h.state.value.copy(modalActive=true,windowFocused=false); runCurrent(); h.loaded(); runCurrent()
         advanceTimeBy(60_000L); runCurrent(); assertTrue(h.displays.isEmpty()); assertTrue(h.frequency.isDue)
-        h.state.value=h.state.value.copy(modalActive=false,windowFocused=true); runCurrent(); assertEquals(1,h.displays.size)
+        h.state.value=h.state.value.copy(modalActive=false,windowFocused=true); runCurrent(); assertTrue(h.displays.isEmpty())
     }
-    @Test fun imeDeferralShowsAfterKeyboardClosesWithoutNewDelay()=runTest {
+    @Test fun imeDismissalNeverPresentsWithoutFreshNaturalBreak()=runTest {
         val h=Harness(this); h.state.value=h.state.value.copy(imeVisible=true); runCurrent(); h.loaded(); runCurrent()
         advanceTimeBy(60_000L); runCurrent(); assertTrue(h.displays.isEmpty()); assertTrue(h.frequency.isDue)
-        h.state.value=h.state.value.copy(imeVisible=false); runCurrent(); assertEquals(1,h.displays.size)
+        h.state.value=h.state.value.copy(imeVisible=false); runCurrent(); assertTrue(h.displays.isEmpty())
     }
     @Test fun activePremiumBeforeDueEvaluationStopsCachedAdAndPreservesDue()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent(); advanceTimeBy(60_000L)
         h.entitlement.value=AdsEntitlement.BlockedPremium; runCurrent()
         assertTrue(h.displays.isEmpty()); assertTrue(h.frequency.isDue); assertFalse(h.frequency.isForeground)
-        h.entitlement.value=AdsEntitlement.AllowedFree; runCurrent(); h.loaded(); runCurrent(); assertEquals(1,h.displays.size)
+        h.entitlement.value=AdsEntitlement.AllowedFree; runCurrent(); h.loaded(); runCurrent(); assertTrue(h.displays.isEmpty())
     }
     @Test fun unsettledEntitlementNeverShowsAndDoesNotStartForegroundClock()=runTest {
         val h=Harness(this); h.entitlement.value=AdsEntitlement.BlockedUnsettled; runCurrent()
@@ -96,12 +100,12 @@ class InterstitialSchedulerTest {
     @Test fun umpBlocksAnAlreadyDueAdUntilConsentAllowsAgain()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent(); advanceTimeBy(60_000L)
         h.consent.value=false; runCurrent(); assertTrue(h.displays.isEmpty()); assertTrue(h.frequency.isDue)
-        h.consent.value=true; runCurrent(); h.loaded(); runCurrent(); assertEquals(1,h.displays.size)
+        h.consent.value=true; runCurrent(); h.loaded(); runCurrent(); assertTrue(h.displays.isEmpty())
     }
-    @Test fun delayedLoadCompletionWakesDueTimerWithoutNavigation()=runTest {
+    @Test fun delayedLoadCompletionCannotPresentWithoutFreshBreak()=runTest {
         val h=Harness(this); runCurrent(); advanceTimeBy(60_000L); runCurrent()
-        assertTrue(h.frequency.isDue); assertTrue(h.displays.isEmpty()); assertEquals(InterstitialDecision.NotLoaded,h.reason)
-        advanceTimeBy(20_000L); h.loaded(); runCurrent(); assertEquals(1,h.displays.size)
+        assertTrue(h.frequency.isDue); assertTrue(h.displays.isEmpty()); assertEquals(InterstitialDecision.DueAwaitingNaturalBreak,h.reason)
+        advanceTimeBy(20_000L); h.loaded(); runCurrent(); assertTrue(h.displays.isEmpty())
     }
     @Test fun loadFailureUsesExactBackoffAndNeverRestartsSatisfiedCadence()=runTest {
         val h=Harness(this); runCurrent(); h.failLoad(); runCurrent()
@@ -109,14 +113,14 @@ class InterstitialSchedulerTest {
         assertTrue(h.frequency.isDue); assertEquals(0L,h.frequency.shownCount)
         advanceTimeBy(59_999L); runCurrent(); assertEquals(2,h.loads.size)
         advanceTimeBy(1L); runCurrent(); assertEquals(3,h.loads.size)
-        h.loaded(); runCurrent(); assertEquals(1,h.displays.size); assertEquals(0L,h.frequency.shownCount)
+        h.loaded(); runCurrent(); assertTrue(h.displays.isEmpty()); h.opportunity(); assertEquals(1,h.displays.size); assertEquals(0L,h.frequency.shownCount)
     }
     @Test fun showFailureRetainsFirstDelayDueAndRetriesAfterSixtySeconds()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent(); advanceTimeBy(60_000L); runCurrent()
-        h.displays.last().failed(); runCurrent(); assertTrue(h.frequency.isDue); assertEquals(60_000L,h.frequency.nextDelayMs)
+        h.opportunity(); h.displays.last().failed(); runCurrent(); assertTrue(h.frequency.isDue); assertEquals(60_000L,h.frequency.nextDelayMs)
         advanceTimeBy(59_999L); runCurrent(); assertEquals(1,h.loads.size)
         advanceTimeBy(1L); runCurrent(); assertEquals(2,h.loads.size)
-        h.loaded(); runCurrent(); assertEquals(2,h.displays.size); assertEquals(0L,h.frequency.shownCount)
+        h.loaded(); runCurrent(); assertEquals(1,h.displays.size); h.opportunity(); assertEquals(2,h.displays.size); assertEquals(0L,h.frequency.shownCount)
     }
     @Test fun dueButUnsafeWaitsForEventsWithoutPeriodicPolling()=runTest {
         val h=Harness(this); h.state.value=h.state.value.copy(route="settings"); runCurrent(); h.loaded(); runCurrent()
@@ -130,14 +134,14 @@ class InterstitialSchedulerTest {
     }
     @Test fun fullscreenDisplayTimeIsExcludedEvenWithoutLifecyclePause()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent(); advanceTimeBy(60_000L); runCurrent()
-        h.displays.last().shown(); runCurrent(); advanceTimeBy(600_000L); runCurrent()
+        h.opportunity(); h.displays.last().shown(); runCurrent(); advanceTimeBy(600_000L); runCurrent()
         assertEquals(80_000L,h.frequency.remainingMs); h.displays.last().dismissed(); h.loaded(); runCurrent()
         advanceTimeBy(79_999L); runCurrent(); assertEquals(1,h.displays.size)
-        advanceTimeBy(1L); runCurrent(); assertEquals(2,h.displays.size)
+        advanceTimeBy(1L); runCurrent(); assertEquals(1,h.displays.size); h.opportunity(); assertEquals(2,h.displays.size)
     }
     @Test fun repeatedSafetyEventsDoNotRestartADeadline()=runTest {
         val h=Harness(this); runCurrent(); h.loaded(); runCurrent(); advanceTimeBy(30_000L)
         repeat(5) { h.changes.tryEmit(Unit); runCurrent() }
-        advanceTimeBy(30_000L); runCurrent(); assertEquals(1,h.displays.size)
+        advanceTimeBy(30_000L); runCurrent(); assertTrue(h.displays.isEmpty())
     }
 }

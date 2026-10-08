@@ -15,7 +15,7 @@ class InterstitialDecisionTest {
         init { coordinator.updateEligibility(true); frequency.setForeground(true) }
         fun opportunity(valid:Boolean=true):InterstitialDecision {
             frequency.setForeground(valid && !coordinator.isShowing)
-            return coordinator.onOpportunity(valid) { _, cb -> callbacks=cb }
+            return coordinator.onOpportunity(NaturalBreakOpportunity(NaturalBreakWorkflow.FuelRecordSaved, time, "history", 0), { if(valid) null else InterstitialDecision.DueButActivityUnavailable }) { _, cb -> callbacks=cb }
         }
         fun ready() { loaded("ad"); time=60_000L; opportunity() }
     }
@@ -40,12 +40,12 @@ class InterstitialDecisionTest {
     }
     @Test fun missingCacheReturnsNotLoadedWithoutConsumption() {
         val h=Harness(); h.time=60_000L
-        assertEquals(InterstitialDecision.NotLoaded,h.opportunity()); assertEquals(0L,h.frequency.shownCount)
+        assertEquals(InterstitialDecision.AdNotReadyAtBreak,h.opportunity()); assertEquals(0L,h.frequency.shownCount)
     }
     @Test fun failureReturnsBackoffUntilExactRetryDeadline() {
         val h=Harness(); h.ready(); h.callbacks!!.failed()
         assertEquals(InterstitialDecision.LoadBackoff,h.opportunity()); assertEquals(0L,h.frequency.shownCount)
-        h.time=120_000L; assertEquals(InterstitialDecision.NotLoaded,h.opportunity())
+        h.time=120_000L; assertEquals(InterstitialDecision.AdNotReadyAtBreak,h.opportunity())
     }
     @Test fun actualDisplayAdvancesTo80SecondsAndRemainsNotDueBeforeIt() {
         val h=Harness(); h.ready(); h.callbacks!!.shown(); h.callbacks!!.shown(); h.callbacks!!.dismissed(); h.loaded("next")

@@ -26,6 +26,7 @@ import com.carmanager.app.core.domain.validation.NumericInput
 import com.carmanager.app.core.domain.validation.GarageValidation
 import com.carmanager.app.core.domain.validation.FormValidationException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import android.util.Log
 
 @HiltViewModel
@@ -34,7 +35,8 @@ class AddFuelViewModel @Inject constructor(
     private val vehicleRepository: VehicleRepository,
     @ApplicationContext private val context: Context,
     private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val completionClock: com.carmanager.app.core.ads.ElapsedRealtimeClock = com.carmanager.app.core.ads.ElapsedRealtimeClock()
 ) : ViewModel() {
     private val workspaceOwner = session.owner.value
 
@@ -76,6 +78,17 @@ class AddFuelViewModel @Inject constructor(
         private set
     private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
+    private var completionHost: Any? = null
+    private var savedHost: Any? = null
+    private var completedSave: CompletedFuelSave? = null
+    internal fun bindCompletionHost(token: Any) { completionHost = token }
+    internal fun unbindCompletionHost(token: Any) { if (completionHost === token) completionHost = null }
+    internal fun consumeCompletedSave(token: Any): CompletedFuelSave? {
+        val result = completedSave.takeIf { !isSaving && hasSaved && savedHost === token && completionHost === token }
+        completedSave = null
+        savedHost = null
+        return result
+    }
 
     var isVehicleLoading by mutableStateOf(false)
         private set
@@ -168,10 +181,15 @@ class AddFuelViewModel @Inject constructor(
             return
         }
         isSaving = true
+        val savingHost = completionHost
         viewModelScope.launch {
             try {
-                saveFuelRecordUseCase(record)
+                val id = saveFuelRecordUseCase(record)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 hasSaved = true
+                isSaving = false
+                completedSave = CompletedFuelSave(record.copy(id = id), completionClock.now())
+                savedHost = savingHost
                 _uiEvent.send(UiEvent.Success)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e

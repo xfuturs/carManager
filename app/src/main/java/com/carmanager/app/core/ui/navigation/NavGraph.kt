@@ -43,6 +43,18 @@ import com.carmanager.app.features.settings.SettingsScreen
 import com.carmanager.app.features.vehicles.AddEditVehicleScreen
 import com.carmanager.app.features.vehicles.VehiclesScreen
 import com.carmanager.app.R
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import com.carmanager.app.core.ads.NaturalBreakOpportunity
+import com.carmanager.app.core.ads.NaturalBreakWorkflow
+import com.carmanager.app.features.fuel.CompletedFuelSave
+
+private data class FuelSaveBreak(val completion: CompletedFuelSave, val destinationId: String, val hostGeneration: Long)
 
 @Composable
 fun CarManagerNavHost(
@@ -61,10 +73,39 @@ fun CarManagerNavHost(
     val bannerRetained by bannerOwner.retained.collectAsState()
     SideEffect { bannerOwner.update(canShowAds, bannerVisible) }
     val interstitialModals = remember { InterstitialModalState() }
-    ObserveTimedInterstitials(navController, activity, interstitials, interstitialModals)
+    var fuelSaveBreak by remember { mutableStateOf<FuelSaveBreak?>(null) }
+    var interactionActive by remember { mutableStateOf(false) }
+    fun discardFuelBreak(expired: Boolean = false) {
+        if (fuelSaveBreak != null) interstitials.discardCompletion(expired)
+        fuelSaveBreak = null
+    }
+    val presentNaturalBreak = ObserveInterstitialEligibility(navController, activity, interstitials, interstitialModals) {
+        discardFuelBreak()
+    }
+    val cancelOnInteraction by rememberUpdatedState({ interstitials.userInteraction(); discardFuelBreak() })
+    LaunchedEffect(fuelSaveBreak) {
+        val event = fuelSaveBreak ?: return@LaunchedEffect
+        val remaining = NaturalBreakOpportunity.VALIDITY_MS -
+            (android.os.SystemClock.elapsedRealtime() - event.completion.completedAtMs)
+        if (remaining > 0) kotlinx.coroutines.delay(remaining)
+        if (fuelSaveBreak === event) discardFuelBreak(expired = true)
+    }
+    LaunchedEffect(navBackStackEntry?.id) {
+        val event = fuelSaveBreak
+        if (event != null && navBackStackEntry?.id != event.destinationId) discardFuelBreak()
+    }
 
     CompositionLocalProvider(LocalInterstitialModals provides interstitialModals) {
     Scaffold(
+        modifier = Modifier.pointerInput(interstitials) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    interactionActive = event.changes.any { it.pressed }
+                    if (event.changes.any { it.pressed && !it.previousPressed }) cancelOnInteraction()
+                }
+            }
+        }.onPreviewKeyEvent { cancelOnInteraction(); false },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             Column {
@@ -190,7 +231,22 @@ fun CarManagerNavHost(
             ) {
                 FuelListScreen(
                     onAddFuel = { id -> navController.navigate(Screen.FuelEdit.createRoute(id)) },
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    completion = fuelSaveBreak?.takeIf { it.destinationId == navBackStackEntry?.id }?.completion,
+                    onSaveResultVisible = { receipt ->
+                        val event = fuelSaveBreak
+                        if (event?.completion === receipt && navController.currentBackStackEntry?.id == event.destinationId) {
+                            fuelSaveBreak = null
+                            if (!interactionActive) presentNaturalBreak(interstitials.createNaturalBreak(
+                                if (receipt.record.isElectric) NaturalBreakWorkflow.EvRechargeSaved else NaturalBreakWorkflow.FuelRecordSaved,
+                                receipt.completedAtMs, event.destinationId, event.hostGeneration))
+                            else interstitials.discardCompletion()
+                        }
+                    },
+                    onCompletionDiscarded = { receipt ->
+                        if (fuelSaveBreak?.completion === receipt) discardFuelBreak(expired =
+                            android.os.SystemClock.elapsedRealtime() - receipt.completedAtMs >= NaturalBreakOpportunity.VALIDITY_MS)
+                    }
                 )
             }
             composable(
@@ -200,7 +256,21 @@ fun CarManagerNavHost(
                 )
             ) {
                 AddFuelScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onSaveCompleted = { receipt ->
+                        discardFuelBreak()
+                        val source = navController.currentBackStackEntry
+                        val target = navController.previousBackStackEntry
+                        val valid = source?.destination?.route == Screen.FuelEdit.route &&
+                            target?.destination?.route == Screen.FuelList.route &&
+                            source.arguments?.getLong("vehicleId") == receipt.record.vehicleId &&
+                            target.arguments?.getLong("vehicleId") == receipt.record.vehicleId &&
+                            !interactionActive && activity.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED && activity.hasWindowFocus()
+                        // Un reçu de retour n'est pas encore une opportunité : attendre le résultat rendu.
+                        val completion = if (valid) FuelSaveBreak(receipt, checkNotNull(target).id,
+                            interstitials.captureHostGeneration()) else null
+                        if (navController.popBackStack()) fuelSaveBreak = completion
+                    }
                 )
             }
             composable(

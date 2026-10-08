@@ -38,7 +38,7 @@ class GarageFormsTest {
     }
     @AfterEach fun cleanup() { Dispatchers.resetMain(); unmockkStatic(Log::class); unmockkObject(NotificationHelper) }
     private fun fuelVm(repository: FuelRepository) = AddFuelViewModel(SaveFuelRecordUseCase(repository), vehicles, context, session,
-        SavedStateHandle(mapOf("vehicleId" to 1L)))
+        SavedStateHandle(mapOf("vehicleId" to 1L)), completionClock = mockk { every { now() } returns 0L })
 
     @Test fun `fuel comma inputs snapshot one transaction across double tap and consumed success`() = runTest(dispatcher) {
         val repository = mockk<FuelRepository>()

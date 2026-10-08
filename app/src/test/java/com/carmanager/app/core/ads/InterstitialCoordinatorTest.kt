@@ -14,9 +14,10 @@ class InterstitialCoordinatorTest {
         val coordinator=InterstitialCoordinator(frequency,clock,load={ loaded:(String)->Unit, failed -> loads+=loaded to failed },changed={ changes++ })
         fun enable() { coordinator.updateEligibility(true); frequency.setForeground(true) }
         fun loaded(index:Int=loads.lastIndex) { loads[index].first("ad") }
+        fun event() = NaturalBreakOpportunity(NaturalBreakWorkflow.FuelRecordSaved, clock.time, "history", 0)
         fun opportunity(valid:Boolean=true):InterstitialDecision {
             frequency.setForeground(valid && !coordinator.isShowing)
-            return coordinator.onOpportunity(valid) { _, callbacks -> displays+=callbacks }
+            return coordinator.onOpportunity(event(), { if (valid) null else InterstitialDecision.DueButActivityUnavailable }) { _, callbacks -> displays+=callbacks }
         }
         fun ready() { enable(); loaded(); clock.time=60_000L; opportunity() }
     }
@@ -57,7 +58,7 @@ class InterstitialCoordinatorTest {
     }
     @Test fun synchronousShowExceptionAlsoPreservesDue() {
         val h=Harness(); h.enable(); h.loaded(); h.clock.time=60_000L
-        assertEquals(InterstitialDecision.ShowFailed,h.coordinator.onOpportunity(true) { _, _ -> error("SDK") })
+        assertEquals(InterstitialDecision.ShowFailed,h.coordinator.onOpportunity(h.event(), { null }) { _, _ -> error("SDK") })
         assertEquals(0L,h.frequency.shownCount); assertTrue(h.frequency.isDue)
         h.coordinator.preload(); assertEquals(1,h.loads.size)
     }
@@ -78,7 +79,7 @@ class InterstitialCoordinatorTest {
     @Test fun falseEligibilityClearsCacheAndPausesClock() {
         val h=Harness(); h.enable(); h.loaded(); h.coordinator.updateEligibility(false)
         assertFalse(h.frequency.isForeground); h.clock.time=60_000L
-        assertEquals(InterstitialDecision.AdsUnavailable,h.coordinator.onOpportunity(true) { _, _ -> fail<Unit>("display") })
+        assertEquals(InterstitialDecision.AdsUnavailable,h.coordinator.onOpportunity(h.event(), { null }) { _, _ -> fail<Unit>("display") })
         h.enable(); assertEquals(2,h.loads.size); assertFalse(h.frequency.isDue)
     }
     @Test fun staleLoadAfterEligibilityCycleCannotCacheOrStartDuplicateLoad() {
@@ -89,7 +90,7 @@ class InterstitialCoordinatorTest {
     }
     @Test fun staleCallbackWhileDisabledDoesNotShowOrPreload() {
         val h=Harness(); h.enable(); h.coordinator.updateEligibility(false); h.loaded()
-        h.clock.time=60_000L; assertEquals(InterstitialDecision.AdsUnavailable,h.coordinator.onOpportunity(true) { _, _ -> fail<Unit>("display") })
+        h.clock.time=60_000L; assertEquals(InterstitialDecision.AdsUnavailable,h.coordinator.onOpportunity(h.event(), { null }) { _, _ -> fail<Unit>("display") })
         assertEquals(1,h.loads.size); assertTrue(h.displays.isEmpty())
     }
     @Test fun cachedAdExpiresAtOneHourWithoutConsumption() {

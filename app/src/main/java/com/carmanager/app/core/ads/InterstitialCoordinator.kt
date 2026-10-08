@@ -5,7 +5,8 @@ internal class InterstitialCoordinator<Ad : Any>(
     val frequency: InterstitialFrequencyPolicy,
     private val clock: MonotonicClock,
     private val load: (loaded: (Ad) -> Unit, failed: () -> Unit) -> Unit,
-    private val changed: () -> Unit = {}
+    private val changed: () -> Unit = {},
+    private val diagnostic: (InterstitialDecision) -> Unit = {}
 ) {
     companion object {
         const val RETRY_BACKOFF_MS = 60_000L
@@ -79,16 +80,20 @@ internal class InterstitialCoordinator<Ad : Any>(
     }
 
     /** Aucun callback present ni host n'est conserve : appel synchrone et retour immediat. */
-    fun onOpportunity(canPresent: Boolean, present: (Ad, DisplayCallbacks) -> Unit): InterstitialDecision {
+    fun onOpportunity(opportunity: NaturalBreakOpportunity, blocker: () -> InterstitialDecision?,
+        present: (Ad, DisplayCallbacks) -> Unit): InterstitialDecision {
+        val eventDecision = opportunity.consume(clock.now())
+        diagnostic(eventDecision)
+        if (eventDecision != InterstitialDecision.NaturalBreakAccepted) return eventDecision
+        blocker()?.let { return it }
         if (!eligible) return InterstitialDecision.AdsUnavailable
-        if (!canPresent) return InterstitialDecision.DueButActivityUnavailable
         if (showingId != null) return InterstitialDecision.Showing
         if (cached != null && clock.now() - loadedAt >= CACHE_MAX_AGE_MS) cached = null
         val ad = cached
         val decision = frequency.decision(eligible)
         if (decision != InterstitialDecision.EligibleToShow || ad == null) {
             val reason = if (decision != InterstitialDecision.EligibleToShow) decision
-                else if (clock.now() < nextLoadAt) InterstitialDecision.LoadBackoff else InterstitialDecision.NotLoaded
+                else if (clock.now() < nextLoadAt) InterstitialDecision.LoadBackoff else InterstitialDecision.AdNotReadyAtBreak
             preload()
             return reason
         }

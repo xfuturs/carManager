@@ -25,12 +25,14 @@ import com.carmanager.app.core.ads.InterstitialScheduler
 /** Unique timer du shell ; les événements de sûreté/SDK interrompent et recalculent l'échéance. */
 @OptIn(ExperimentalLayoutApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
-internal fun ObserveTimedInterstitials(
+internal fun ObserveInterstitialEligibility(
     navController: NavHostController,
     activity: ComponentActivity,
     manager: InterstitialAdManager,
-    modals: InterstitialModalState
-) {
+    modals: InterstitialModalState,
+    onHostUnavailable: () -> Unit
+): (com.carmanager.app.core.ads.NaturalBreakOpportunity) -> Unit {
+    val unavailable by rememberUpdatedState(onHostUnavailable)
     val window = LocalWindowInfo.current
     val imeVisible by rememberUpdatedState(WindowInsets.isImeVisible)
     val currentState by rememberUpdatedState({
@@ -41,7 +43,8 @@ internal fun ObserveTimedInterstitials(
             destinationResumed = entry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true,
             windowFocused = window.isWindowFocused,
             imeVisible = imeVisible,
-            modalActive = modals.blocked.value
+            modalActive = modals.blocked.value,
+            destinationId = entry?.id
         )
     })
     LaunchedEffect(navController, activity, manager, modals) {
@@ -57,8 +60,8 @@ internal fun ObserveTimedInterstitials(
                             // Laisser la composition fermer les modales et terminer la transition.
                             withFrameNanos { }
                             val state = currentState()
-                            manager.updateForeground(state)
-                            manager.onTimedOpportunity(activity, state)
+                            if (!state.hostResumed || !state.windowFocused || state.modalActive) unavailable()
+                            manager.onClockOrHostChanged(state)
                         },
                         nextDelay = manager::nextWakeDelay
                     )
@@ -69,4 +72,5 @@ internal fun ObserveTimedInterstitials(
             manager.pauseForeground()
         }
     }
+    return { opportunity -> manager.onNaturalBreak(activity, currentState(), opportunity) }
 }

@@ -37,7 +37,7 @@ class OcrViewModelTest {
     private fun screen(form: Form): Screen {
         val handle=SavedStateHandle(mapOf("vehicleId" to 1L))
         val screen=when(form) {
-            Form.FUEL -> AddFuelViewModel(SaveFuelRecordUseCase(fuel),vehicles,context,garage.session,handle).let {
+            Form.FUEL -> AddFuelViewModel(SaveFuelRecordUseCase(fuel),vehicles,context,garage.session,handle, completionClock = mockk { every { now() } returns 0L }).let {
                 Screen(it,{ it.onScanReceipt(uri) },{ it.isScanning },it::onTotalPriceChange,{ it.totalPrice },it.uiEvent)
             }
             Form.MAINTENANCE -> AddMaintenanceViewModel(SaveMaintenanceUseCase(maintenance,vehicles,garage.session,context),vehicles,context,garage.session,handle).let {

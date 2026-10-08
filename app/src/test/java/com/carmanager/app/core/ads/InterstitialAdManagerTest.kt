@@ -41,7 +41,7 @@ class InterstitialAdManagerTest {
     private val loads=mutableListOf<InterstitialAdLoadCallback>()
     private var callback:FullScreenContentCallback?=null
     private lateinit var manager:InterstitialAdManager
-    private val safe=InterstitialPresentability("dashboard",true,true,true,false)
+    private val safe=InterstitialPresentability("fuel/{vehicleId}",true,true,true,false,destinationId="history")
 
     @BeforeEach fun setup() {
         mockkStatic(SystemClock::class,Log::class,ViewCompat::class,UserMessagingPlatform::class,InterstitialAd::class)
@@ -70,10 +70,10 @@ class InterstitialAdManagerTest {
     private fun enable() { manager.updateEligibility(true); manager.updateForeground(safe) }
     private fun loaded() { loads.last().onAdLoaded(ad) }
     private fun due() { enable(); loaded(); now=60_000L }
-    private fun show(state:InterstitialPresentability=safe) { manager.onTimedOpportunity(activity,state) }
+    private fun show(state:InterstitialPresentability=safe) { manager.onNaturalBreak(activity,state,manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")) }
     private fun assertNoShow() { verify(exactly=0) { ad.show(any()) } }
 
-    @Test fun initialForegroundDeadlineIs60SecondsAndNoNavigationIsRequired() {
+    @Test fun initialForegroundDeadlineRequiresANewNaturalBreak() {
         enable(); loaded(); assertEquals(60_000L,manager.nextWakeDelay())
         now=59_999L; show(); assertNoShow()
         now=60_000L; show(); verify(exactly=1) { ad.show(activity) }
@@ -122,7 +122,7 @@ class InterstitialAdManagerTest {
         now+=59_999L; show(); assertEquals(1,loads.size)
         now++; show(); assertEquals(2,loads.size); loaded(); show(); verify(exactly=2) { ad.show(activity) }
     }
-    @Test fun failedLoadCannotAdvanceCadenceAndLateSuccessCanShowDue() {
+    @Test fun failedLoadCannotAdvanceCadenceAndLateSuccessRequiresFreshBreak() {
         enable(); val error=mockk<LoadAdError>(); every { error.code } returns 1
         loads.last().onAdFailedToLoad(error); now=60_000L; show(); assertEquals(2,loads.size)
         assertNoShow(); loaded(); show(); verify(exactly=1) { ad.show(activity) }
@@ -136,5 +136,67 @@ class InterstitialAdManagerTest {
         due(); show(); val actual=checkNotNull(callback)
         actual.onAdShowedFullScreenContent(); actual.onAdShowedFullScreenContent(); actual.onAdDismissedFullScreenContent(); loaded(); manager.updateForeground(safe)
         assertEquals(80_000L,manager.nextWakeDelay())
+    }
+    @Test fun timerExpiryAndAllPassiveHostUpdatesNeverPresent() {
+        enable(); loaded(); now=60_000L
+        val dashboard=safe.copy(route="dashboard")
+        repeat(3) { manager.onClockOrHostChanged(dashboard) }
+        manager.onClockOrHostChanged(dashboard.copy(hostResumed=false))
+        now+=600_000L
+        manager.onClockOrHostChanged(dashboard)
+        manager.onClockOrHostChanged(dashboard.copy(windowFocused=false))
+        manager.onClockOrHostChanged(dashboard.copy(modalActive=true))
+        manager.onClockOrHostChanged(dashboard.copy(imeVisible=true))
+        manager.onClockOrHostChanged(dashboard)
+        manager.updateEligibility(false); manager.updateEligibility(true); loaded()
+        manager.onClockOrHostChanged(dashboard)
+        assertNoShow()
+    }
+    @Test fun loadedAfterMissedBreakCannotShowOrReuseTheOldEvent() {
+        enable(); now=60_000L
+        val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+        loaded(); manager.onClockOrHostChanged(safe); assertNoShow()
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+        show(); verify(exactly=1) { ad.show(activity) }
+    }
+    @Test fun resumeAndRefocusCannotReviveAMissedBreak() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        resumed=false; manager.onNaturalBreak(activity,safe,event)
+        resumed=true; focused=false; manager.onClockOrHostChanged(safe.copy(windowFocused=false))
+        focused=true; manager.onClockOrHostChanged(safe)
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+    }
+    @Test fun consentRestorationRequiresAFreshBreak() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        consentAllowed=false; manager.onNaturalBreak(activity,safe,event)
+        consentAllowed=true; manager.onClockOrHostChanged(safe); loaded()
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+        show(); verify(exactly=1) { ad.show(activity) }
+    }
+    @Test fun premiumSettlementCannotReplayABlockedEvent() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        premiumState.value=PremiumState(); manager.onNaturalBreak(activity,safe,event)
+        premiumState.value=PremiumState(entitlement=PremiumEntitlement.FREE,isLoading=false,ownershipVerified=true)
+        manager.onClockOrHostChanged(safe); loaded()
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+    }
+    @Test fun aNewUserGestureInvalidatesAnUnpresentedCompletion() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        manager.userInteraction(); manager.onNaturalBreak(activity,safe,event); assertNoShow()
+    }
+    @Test fun aRestoredOrDifferentDestinationCannotUseThePermit() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        manager.onNaturalBreak(activity,safe.copy(destinationId="restored"),event); assertNoShow()
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+    }
+    @Test fun expiredCompletionCannotRequestSdkShow() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.EvRechargeSaved,now,"history")
+        now+=NaturalBreakOpportunity.VALIDITY_MS
+        manager.onNaturalBreak(activity,safe,event); assertNoShow()
+    }
+    @Test fun dashboardCannotPresentEvenWithAFuelSavePermit() {
+        due(); val event=manager.createNaturalBreak(NaturalBreakWorkflow.FuelRecordSaved,now,"history")
+        manager.onNaturalBreak(activity,safe.copy(route="dashboard"),event); assertNoShow()
     }
 }
