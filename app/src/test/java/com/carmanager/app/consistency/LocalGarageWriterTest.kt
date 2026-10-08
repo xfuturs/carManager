@@ -38,16 +38,16 @@ class LocalGarageWriterTest {
         }
     }
 
-    @Test fun `owner transition during write rolls back while foreign and blocked owners cannot write`() = runTest {
+    @Test fun `garage readiness loss during write rolls back while foreign and blocked owners cannot write`() = runTest {
         val f = GarageFixture()
         val before = f.vehicles.toMap()
         f.changeOwnerAfterHistory = true
         assertNotNull(runCatching { f.writer.saveFuel(f.fuel()) }.exceptionOrNull())
         assertEquals(before, f.vehicles); assertTrue(f.fuelRows.isEmpty()); assertTrue(f.history.isEmpty())
         assertNotNull(runCatching { f.writer.saveMaintenance(f.maintenance()) }.exceptionOrNull())
-        f.session.setAuthenticatedUid("A")
+        f.session.completeBootstrap()
         assertNotNull(runCatching { f.writer.saveFuel(f.fuel().copy(vehicleId = 2)) }.exceptionOrNull())
-        f.registry.block("firebase:A")
+        f.registry.block("local:device")
         assertNotNull(runCatching { f.writer.saveMaintenance(f.maintenance()) }.exceptionOrNull())
         assertEquals(before, f.vehicles); assertTrue(f.maintenanceRows.isEmpty())
     }
@@ -65,7 +65,7 @@ class LocalGarageWriterTest {
 
     @Test fun `manual greater and equal journal once lower fails without misleading history`() = runTest {
         val f = GarageFixture()
-        fun reading(value: Int) = MileageRecord(vehicleId = 1, ownerKey = "firebase:A", date = 0, mileage = value, source = MileageSource.MANUAL)
+        fun reading(value: Int) = MileageRecord(vehicleId = 1, ownerKey = "local:device", date = 0, mileage = value, source = MileageSource.MANUAL)
         f.writer.saveMileage(reading(1500)); f.writer.saveMileage(reading(1500))
         assertEquals(listOf(1500, 1500), f.history.map { it.mileage })
         assertInstanceOf(FormValidationException::class.java, runCatching { f.writer.saveMileage(reading(1400)) }.exceptionOrNull())
@@ -96,7 +96,7 @@ class LocalGarageWriterTest {
         f.vehicles[1] = f.vehicles[1]!!.copy(currentMileage = 4000)
         f.writer.saveVehicle(stale.copy(model = "Nouveau modèle", createdAt = 0, updatedAt = 0))
         val saved = f.vehicles[1]!!
-        assertEquals(77L, saved.createdAt); assertEquals("firebase:A", saved.ownerKey)
+        assertEquals(77L, saved.createdAt); assertEquals("local:device", saved.ownerKey)
         assertEquals("legacy-id", saved.remoteId); assertEquals("LEGACY", saved.syncStatus)
         assertEquals(4000, saved.currentMileage); assertEquals("Nouveau modèle", saved.model)
         assertTrue(saved.updatedAt >= 88); assertTrue(f.history.isEmpty())

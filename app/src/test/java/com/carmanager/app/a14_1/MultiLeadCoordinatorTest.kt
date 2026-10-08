@@ -35,12 +35,12 @@ class MultiLeadCoordinatorTest {
         withTimeout(5000) { finished.await() }
         verify(exactly=4) { NotificationHelper.scheduleReminder(any(),any(),any(),any(),any(),any(),any(),any()) }
         assertEquals(setOf(0,1,7,30),settings.knownKeys().map { it.leadDays }.toSet())
-        verify { NotificationHelper.cancelOwnedReminder(any(),"firebase:A",any(),null) }
+        verify { NotificationHelper.cancelOwnedReminder(any(),"local:device",any(),null) }
     }
     @Test fun `actual boot with global off cancels legacy and every durable multi key`() = scenario { coordinator,settings,garage ->
         val id=9L
         settings.update { it.copy(enabled=false,leadDaysSet=setOf(30,7,1,0)) }
-        settings.saveKeys(setOf(0,1,7,30).map { ReminderKey("firebase:A",id,it) }.toSet()+ReminderKey("firebase:A",id,null))
+        settings.saveKeys(setOf(0,1,7,30).map { ReminderKey("local:device",id,it) }.toSet()+ReminderKey("local:device",id,null))
         val finished=CompletableDeferred<Unit>(); coordinator.afterBoot { finished.complete(Unit) }
         withTimeout(5000) { finished.await() }
         verify(exactly=0) { NotificationHelper.scheduleReminder(any(),any(),any(),any(),any(),any(),any(),any()) }

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.io.TempDir
 
 class StagedDocumentFileTest {
     @TempDir lateinit var directory: File
-    private fun doc(path: String) = Document(1,1,"Image",DocumentCategory.PHOTOS,path,0,"firebase:A")
+    private fun doc(path: String) = Document(1,1,"Image",DocumentCategory.PHOTOS,path,0,"local:device")
     @Test fun `exact finished bytes are indexed after preparation and inside short commit`() = runTest {
         val order=mutableListOf<String>(); var inCommit=false
         val result=StagedDocumentFile.store({

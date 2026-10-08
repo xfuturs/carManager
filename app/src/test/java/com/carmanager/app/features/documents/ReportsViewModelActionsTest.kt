@@ -19,10 +19,10 @@ import java.io.File
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportsViewModelActionsTest {
     @TempDir lateinit var directory: File
-    private val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid("A") }
+    private val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
     private val context by lazy { mockk<Context>().also { every { it.filesDir } returns directory } }
     private val source by lazy { File(directory, "report.pdf").apply { writeText("%PDF-existing") } }
-    private val doc get() = Document(11, 7, "Rapport", DocumentCategory.REPORTS, source.path, 0, "firebase:A")
+    private val doc get() = Document(11, 7, "Rapport", DocumentCategory.REPORTS, source.path, 0, "local:device")
     private fun scenario(body: suspend TestScope.(ViewModelStore) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler)); val store = ViewModelStore()
         try { body(store) } finally { store.clear(); Dispatchers.resetMain() }
@@ -44,7 +44,7 @@ class ReportsViewModelActionsTest {
     }
     @Test fun `stale workspace cannot delete original report`() = scenario { store ->
         val repository = mockk<DocumentRepository>(); val vm = documents(store, repository); val saved = doc
-        session.setAuthenticatedUid("B"); vm.deleteDocument(saved); runCurrent()
+        session.beginBootstrap(); vm.deleteDocument(saved); runCurrent()
         coVerify(exactly = 0) { repository.deleteDocument(any()) }; assertTrue(source.exists())
     }
     @Test fun `wrong vehicle cannot delete report`() = scenario { store ->
@@ -56,8 +56,8 @@ class ReportsViewModelActionsTest {
         val vm = export(store); assertEquals("report.pdf", vm.prepareExport(doc)); assertNull(vm.prepareExport(doc))
         vm.finishExport(null); assertEquals("report.pdf", vm.prepareExport(doc)); assertTrue(source.exists())
     }
-    @Test fun `export viewmodel refuses old workspace after account switch`() = scenario { store ->
-        val vm = export(store); val saved = doc; session.setAuthenticatedUid("B")
+    @Test fun `export viewmodel refuses old workspace during garage bootstrap`() = scenario { store ->
+        val vm = export(store); val saved = doc; session.beginBootstrap()
         assertNull(vm.prepareExport(saved)); assertTrue(source.exists())
     }
 }

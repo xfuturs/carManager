@@ -11,6 +11,15 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface VehicleDao {
+    @Query("SELECT DISTINCT ownerKey FROM vehicles WHERE ownerKey != :canonical")
+    suspend fun legacyOwners(canonical: String): List<String>
+
+    @Query("UPDATE vehicles SET ownerKey = :canonical WHERE ownerKey != :canonical")
+    suspend fun consolidateOwners(canonical: String): Int
+
+    @Query("SELECT EXISTS(SELECT 1 FROM vehicles WHERE id = :id)")
+    suspend fun existsById(id: Long): Boolean
+
     @Query("SELECT * FROM vehicles WHERE ownerKey = :ownerKey ORDER BY brand ASC, model ASC")
     fun observeAll(ownerKey: String): Flow<List<VehicleEntity>>
 

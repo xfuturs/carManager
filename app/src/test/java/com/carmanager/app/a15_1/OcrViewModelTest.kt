@@ -75,7 +75,7 @@ class OcrViewModelTest {
     @ParameterizedTest @EnumSource(Form::class)
     fun `owner change during recognition cannot publish values into stale form`(form: Form)=runTest(dispatcher) {
         val gate=CompletableDeferred<OcrHelper.Analysis>(); coEvery { OcrHelper.analyzeImage(context,uri) } coAnswers { gate.await() }
-        val screen=screen(form); runCurrent(); screen.edit("10"); screen.scan(); garage.session.setAuthenticatedUid("B")
+        val screen=screen(form); runCurrent(); screen.edit("10"); screen.scan(); garage.session.beginBootstrap()
         gate.complete(OcrHelper.Analysis.Values(OcrHelper.OcrResult(totalPrice=42.5))); runCurrent()
         assertEquals("10",screen.price()); assertFalse(screen.scanning()); assertTrue((screen.events.first() as UiEvent.ShowSnackbar).message.contains("impossible"))
     }

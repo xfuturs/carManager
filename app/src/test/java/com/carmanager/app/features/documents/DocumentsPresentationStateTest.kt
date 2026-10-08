@@ -24,7 +24,7 @@ class DocumentsPresentationStateTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
-            val session = WorkspaceSession(TestDeletionRegistry()).apply { if (resolved) setAuthenticatedUid(null) }
+            val session = WorkspaceSession(TestDeletionRegistry()).apply { if (resolved) completeBootstrap() }
             val source = MutableSharedFlow<List<Document>>()
             var attempts = 0
             val repository = mockk<DocumentRepository>()
@@ -88,11 +88,11 @@ class DocumentsPresentationStateTest {
         observe(vm); runCurrent()
         val old = document(session.owner.value, 1, "Ancien document", DocumentCategory.PHOTOS)
         source.emit(listOf(old)); runCurrent()
-        session.setAuthenticatedUid("B"); runCurrent()
+        session.beginBootstrap(); runCurrent()
         assertEquals(LocalDataState.Loading, vm.uiState.value)
         assertFalse(vm.canOpen(old))
-        source.emit(emptyList()); runCurrent()
-        assertEquals(LocalDataState.Ready("firebase:B", emptyList<Document>()), vm.uiState.value)
+        session.completeBootstrap(); runCurrent(); source.emit(emptyList()); runCurrent()
+        assertEquals(LocalDataState.Ready("local:device", emptyList<Document>()), vm.uiState.value)
     }
 
     @Test fun `stopped screen discards replay and waits for fresh documents`() = scenario { _, vm, source, _ ->

@@ -26,12 +26,12 @@ enum class DeletionStage(val label: String) {
 data class DeletionState(val owner: String? = null, val stage: DeletionStage? = null, val running: Boolean = false, val error: String? = null)
 class AccountDeletionFailure(val stage: DeletionStage, cause: Throwable, suspended: Boolean) : Exception(
     "Suppression incomplète à l'étape ${stage.label} : ${cause.localizedMessage ?: "erreur"}. Les étapes précédentes peuvent être définitives." +
-        if (suspended) " Les modifications restent suspendues. Réessayez la suppression du même compte." else " Aucune suppression destructive n'a commencé.", cause
+        if (suspended) " Réessayez la suppression du même compte. Votre garage local reste conservé." else " Aucune suppression destructive n'a commencé.", cause
 )
 
 @Singleton
 class AccountDeletion @Inject constructor(
-    private val session: WorkspaceSession,
+    private val session: AuthSession,
     private val registry: DeletionRegistry,
     private val sync: SyncRepository,
     private val local: LocalAccountData,
@@ -51,7 +51,7 @@ class AccountDeletion @Inject constructor(
             var stage = DeletionStage.STOP_SYNC
             try {
                 val uid = WorkspaceOwner.uid(owner) ?: error("Aucun compte connecté")
-                session.requireCurrent(owner)
+                session.requireAccount(owner)
                 remote.requireUid(uid)
                 _state.value = DeletionState(owner, stage, running = true)
                 registry.block(owner)
@@ -60,11 +60,9 @@ class AccountDeletion @Inject constructor(
                 _state.value = DeletionState(owner, stage, running = true)
                 remote.drainWrites(uid)
                 remote.deleteKnownData(uid)
-                stage = DeletionStage.LOCAL
-                _state.value = DeletionState(owner, stage, running = true)
-                session.requireCurrent(owner)
+                // LOCAL est conservé pour compatibilité historique, mais aucune purge de garage ne reprend.
+                session.requireAccount(owner)
                 remote.requireUid(uid)
-                local.purge(owner)
                 stage = DeletionStage.AUTH
                 _state.value = DeletionState(owner, stage, running = true)
                 remote.deleteAuth(uid)

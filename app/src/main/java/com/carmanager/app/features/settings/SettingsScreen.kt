@@ -55,6 +55,8 @@ fun SettingsScreen(
     val deletionState by viewModel.deletionState.collectAsState()
     val deletionPending by viewModel.deletionPending.collectAsState()
     val accountError by viewModel.accountError.collectAsState()
+    val logoutConfirmation by viewModel.logoutConfirmation.collectAsState()
+    val logoutRunning by viewModel.logoutRunning.collectAsState()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showPremiumTerms by remember { mutableStateOf(false) }
     var showRefundPolicy by remember { mutableStateOf(false) }
@@ -99,11 +101,21 @@ fun SettingsScreen(
                     R.string.premium_refund_4, R.string.premium_refund_5, R.string.premium_refund_6).forEach { Text(stringResource(it)) }
             } }, confirmButton = { TextButton(onClick = { showRefundPolicy = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Fermer") } })
     }
+    if (logoutConfirmation && user != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelSignOut,
+            title = { Text(LogoutConfirmationCopy.TITLE) },
+            text = { Text(LogoutConfirmationCopy.BODY) },
+            confirmButton = { TextButton(onClick = viewModel::confirmSignOut,
+                enabled = !logoutRunning && !deletionState.running) { Text("Se déconnecter") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelSignOut) { Text("Annuler") } }
+        )
+    }
     if (showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("Supprimer ce compte ?") },
-            text = { Text("Les données locales et les collections cloud connues de ce compte seront supprimées, puis le compte Firebase. L'espace invité et les autres comptes seront conservés. Une erreur peut laisser une suppression partielle ; elle sera signalée.") },
+            text = { Text("Le compte Firebase et ses anciennes collections cloud connues seront supprimés. Votre garage local et ses documents restent sur cet appareil. Une erreur peut laisser une suppression partielle ; elle sera signalée.") },
             confirmButton = { TextButton(onClick = { showDeleteConfirmation = false; viewModel.deleteAccount() }, enabled = !deletionState.running, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Supprimer") } },
             dismissButton = { TextButton(onClick = { showDeleteConfirmation = false }) { Text("Annuler") } }
         )
@@ -130,24 +142,26 @@ fun SettingsScreen(
                     if (user != null) {
                         Text(stringResource(R.string.premium_status_connected), style = MaterialTheme.typography.labelSmall)
                         Text(user?.email ?: "Compte Google", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("Votre garage reste local sur cet appareil, sans synchronisation Google.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
-                            onClick = { viewModel.signOut() },
-                            enabled = !deletionState.running,
+                            onClick = viewModel::requestSignOut,
+                            enabled = !deletionState.running && !logoutRunning,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
                             shape = CarManagerShapes.control
                         ) {
                             @Suppress("DEPRECATION")
-                            Text(stringResource(R.string.premium_logout))
+                            Text(if (logoutRunning) "Déconnexion…" else stringResource(R.string.premium_logout))
                         }
                         
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         TextButton(
                             onClick = { showDeleteConfirmation = true },
-                            enabled = !deletionState.running,
+                            enabled = !deletionState.running && !logoutRunning,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {
@@ -158,7 +172,7 @@ fun SettingsScreen(
                             Text("Suppression en cours — ${deletionState.stage?.label}", style = MaterialTheme.typography.bodySmall)
                         }
                         if (deletionPending && !deletionState.running) {
-                            Text("Suppression à reprendre : modifications suspendues pour ce compte. Réessayez la suppression.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text("Suppression du compte à reprendre. Votre garage local reste accessible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }
                         accountError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     } else {

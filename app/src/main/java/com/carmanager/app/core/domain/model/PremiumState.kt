@@ -13,9 +13,11 @@ data class PremiumState(
     val isLoading: Boolean = true,
     val isPurchasing: Boolean = false,
     val acknowledgementPending: Boolean = false,
-    val issue: PremiumIssue? = null
+    val issue: PremiumIssue? = null,
+    // FREE par défaut n'est pas une réponse Play. Seule une propriété vérifiée fait autorité.
+    val ownershipVerified: Boolean = false
 ) {
     val isPremium: Boolean get() = entitlement == PremiumEntitlement.ACTIVE
-    val canPurchase: Boolean get() = entitlement == PremiumEntitlement.FREE && offer != null &&
+    val canPurchase: Boolean get() = ownershipVerified && entitlement == PremiumEntitlement.FREE && offer != null &&
         !isLoading && !isPurchasing
 }

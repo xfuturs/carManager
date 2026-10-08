@@ -15,9 +15,11 @@ import javax.inject.Singleton
 @Singleton
 class PremiumRepositoryImpl internal constructor(
     private val gateway: PlayBillingGateway,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val diagnostics: PremiumDiagnostics = PremiumDiagnostics.NONE
 ) : PremiumRepository {
-    @Inject constructor(gateway: PlayBillingGateway) : this(gateway, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+    @Inject constructor(gateway: PlayBillingGateway, diagnostics: AndroidPremiumDiagnostics) :
+        this(gateway, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate), diagnostics)
 
     private val _state = MutableStateFlow(PremiumState())
     override val state = _state.asStateFlow()
@@ -29,6 +31,7 @@ class PremiumRepositoryImpl internal constructor(
     private val commands = Channel<Command>(Channel.UNLIMITED)
     private val acknowledgedTokens = mutableSetOf<String>()
     private val failedAcknowledgements = mutableSetOf<String>()
+    private var connectionEpoch = 0L
 
     private sealed interface Command {
         data class Refresh(val keepIssue: PremiumIssue? = null, val retryAcknowledgement: Boolean = true) : Command
@@ -37,7 +40,13 @@ class PremiumRepositoryImpl internal constructor(
 
     override fun initialize() {
         if (!initialized.compareAndSet(false, true)) return
-        scope.launch { gateway.events.collect { commands.send(Command.Event(it)) } }
+        scope.launch { gateway.events.collect { event ->
+            if (event == BillingEvent.Disconnected) {
+                // Ne pas attendre une offre/ack en cours pour refermer les portes publicitaires.
+                connectionEpoch++
+                unavailable()
+            } else commands.send(Command.Event(event))
+        } }
         scope.launch {
             // Un seul worker : requêtes et acknowledgements sérialisés.
             for (command in commands) {
@@ -47,7 +56,8 @@ class PremiumRepositoryImpl internal constructor(
                         is Command.Event -> handleEvent(command.value)
                     }
                 } catch (error: Exception) {
-                    if (error is CancellationException) throw error
+                    // Une opération annulée ne doit pas tuer définitivement le worker de restauration.
+                    if (error is CancellationException && !currentCoroutineContext().isActive) throw error
                     unavailable()
                 }
             }
@@ -68,8 +78,7 @@ class PremiumRepositoryImpl internal constructor(
         val current = state.value
         if (!current.canPurchase || !launching.compareAndSet(false, true)) return
         if (!gateway.isReady) {
-            launching.set(false)
-            publish(current.copy(offer = null, issue = PremiumIssue.STORE_UNAVAILABLE))
+            unavailable()
             return
         }
         publish(current.copy(isPurchasing = true, issue = null))
@@ -80,25 +89,28 @@ class PremiumRepositoryImpl internal constructor(
             launching.set(false)
             when (outcome) {
                 BillingOutcome.ALREADY_OWNED -> {
-                    publish(state.value.copy(isPurchasing = false, isLoading = true, offer = null, issue = null))
+                    publish(state.value.copy(isPurchasing = false, isLoading = true, ownershipVerified = false, offer = null, issue = null))
                     enqueueRefresh()
                 }
                 BillingOutcome.CANCELED -> publish(state.value.copy(isPurchasing = false, issue = null))
-                BillingOutcome.UNAVAILABLE -> publish(state.value.copy(isPurchasing = false, offer = null, issue = PremiumIssue.STORE_UNAVAILABLE))
+                BillingOutcome.UNAVAILABLE -> unavailable()
                 else -> publish(state.value.copy(isPurchasing = false, issue = PremiumIssue.PURCHASE_FAILED))
             }
         }
     }
 
     private suspend fun refresh(command: Command.Refresh) {
-        publish(state.value.copy(isLoading = true, offer = null))
+        val epoch = connectionEpoch
+        publish(state.value.copy(isLoading = true, ownershipVerified = false, offer = null))
         if (!gateway.isReady && gateway.connect() != BillingOutcome.OK) {
             unavailable()
             return
         }
+        diagnostics.record(PremiumDiagnostic.OwnershipQueryStart, null)
         val purchases = gateway.queryPurchases()
-        if (purchases.outcome != BillingOutcome.OK || purchases.data == null) {
+        if (purchases.outcome != BillingOutcome.OK || purchases.data == null || !gateway.isReady || epoch != connectionEpoch) {
             // État déjà confirmé conservé en mémoire ; aucune propriété inventée au démarrage.
+            diagnostics.record(PremiumDiagnostic.OwnershipFailed, purchases.outcome)
             unavailable()
             return
         }
@@ -106,10 +118,16 @@ class PremiumRepositoryImpl internal constructor(
         publish(state.value.copy(isPurchasing = false))
         processPurchases(purchases.data, replace = true, retryAcknowledgement = command.retryAcknowledgement)
         if (state.value.entitlement == PremiumEntitlement.FREE) {
-            val reply = gateway.queryOffer()
+            diagnostics.record(PremiumDiagnostic.OfferQueryStart, null)
+            val reply = try { gateway.queryOffer() } catch (error: Exception) {
+                if (error is CancellationException && !currentCoroutineContext().isActive) throw error
+                BillingReply<PremiumOffer>(BillingOutcome.ERROR)
+            }
+            if (epoch != connectionEpoch || !gateway.isReady) { unavailable(); return }
             val offer = reply.data?.takeIf { it.productId == PREMIUM_PRODUCT_ID && it.formattedPrice.isNotBlank() }
             publish(state.value.copy(isLoading = false, offer = if (reply.outcome == BillingOutcome.OK) offer else null,
                 issue = if (reply.outcome == BillingOutcome.OK && offer != null) command.keepIssue else PremiumIssue.OFFER_UNAVAILABLE))
+            if (reply.outcome != BillingOutcome.OK || offer == null) diagnostics.record(PremiumDiagnostic.OfferUnavailable, reply.outcome)
         } else publish(state.value.copy(isLoading = false))
     }
 
@@ -128,7 +146,8 @@ class PremiumRepositoryImpl internal constructor(
                     BillingOutcome.UNAVAILABLE -> PremiumIssue.STORE_UNAVAILABLE
                     BillingOutcome.ERROR -> PremiumIssue.PURCHASE_FAILED
                 }
-                if (event.outcome != BillingOutcome.OK) publish(state.value.copy(issue = issue))
+                if (event.outcome == BillingOutcome.UNAVAILABLE) unavailable()
+                else if (event.outcome != BillingOutcome.OK) publish(state.value.copy(issue = issue))
                 // Les échecs d'ack attendent un prochain resume/refresh explicite, sans boucle immédiate.
                 enqueueRefresh(issue, retryAcknowledgement = false)
             }
@@ -152,7 +171,13 @@ class PremiumRepositoryImpl internal constructor(
             failedAcknowledgements.retainAll(liveTokens)
         }
         val awaiting = purchased.filter { !it.acknowledged && it.token !in acknowledgedTokens }
-        publish(state.value.copy(entitlement = entitlement, offer = null,
+        if (replace) diagnostics.record(when (entitlement) {
+            PremiumEntitlement.FREE -> PremiumDiagnostic.OwnershipFree
+            PremiumEntitlement.ACTIVE -> PremiumDiagnostic.OwnershipActive
+            PremiumEntitlement.PENDING -> PremiumDiagnostic.OwnershipPending
+        }, BillingOutcome.OK)
+        // Publier la propriété dès la réponse achats, sans attendre prix/offre ou acknowledgement.
+        publish(state.value.copy(entitlement = entitlement, offer = null, isLoading = false, ownershipVerified = true,
             acknowledgementPending = awaiting.isNotEmpty(), issue = null))
         for (purchase in awaiting) {
             if (!retryAcknowledgement && purchase.token in failedAcknowledgements) continue
@@ -172,11 +197,17 @@ class PremiumRepositoryImpl internal constructor(
 
     private fun unavailable() {
         launching.set(false)
-        publish(state.value.copy(isLoading = false, isPurchasing = false, offer = null, issue = PremiumIssue.STORE_UNAVAILABLE))
+        publish(state.value.copy(isLoading = false, isPurchasing = false, ownershipVerified = false,
+            offer = null, issue = PremiumIssue.STORE_UNAVAILABLE))
     }
 
     private fun publish(value: PremiumState) {
         _state.value = value
         _isPremium.value = value.isPremium
+        diagnostics.record(when {
+            value.isPremium -> PremiumDiagnostic.StateActive
+            value.ownershipVerified && value.entitlement == PremiumEntitlement.FREE && !value.isPurchasing -> PremiumDiagnostic.StateFree
+            else -> PremiumDiagnostic.StateUnsettled
+        }, null)
     }
 }

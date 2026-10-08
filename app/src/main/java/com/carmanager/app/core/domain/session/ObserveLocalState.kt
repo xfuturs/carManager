@@ -12,12 +12,13 @@ fun <T> observeLocalState(
     session: WorkspaceSession,
     retry: Flow<Int>,
     query: (String) -> Flow<T>
-): Flow<LocalDataState<T>> = combine(session.owner, session.isResolved, retry) { owner, resolved, attempt ->
-    Triple(owner, resolved, attempt)
-}.flatMapLatest { (owner, resolved, _) ->
+): Flow<LocalDataState<T>> = combine(session.owner, session.readiness, retry) { owner, readiness, attempt ->
+    Triple(owner, readiness, attempt)
+}.flatMapLatest { (owner, readiness, _) ->
     flow<LocalDataState<T>> {
         emit(LocalDataState.Loading)
-        if (resolved) {
+        if (readiness == GarageReadiness.Error) emit(LocalDataState.Error(owner))
+        if (readiness == GarageReadiness.Ready) {
             try {
                 query(owner).collect { data ->
                     if (session.owner.value == owner) emit(LocalDataState.Ready(owner, data))

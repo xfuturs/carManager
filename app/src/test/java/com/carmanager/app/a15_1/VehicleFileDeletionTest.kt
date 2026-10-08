@@ -15,7 +15,7 @@ import org.junit.jupiter.api.io.TempDir
 class VehicleFileDeletionTest {
     @TempDir lateinit var root: File
     private val registry = TestDeletionRegistry()
-    private val session = WorkspaceSession(registry).apply { setAuthenticatedUid("A") }
+    private val session = WorkspaceSession(registry).apply { completeBootstrap() }
     private val vehicle = GarageFixture().vehicle()
     private val directory get() = File(root,"vehicle_documents").apply { mkdirs() }
     private val journalFile get() = File(root,"cleanup-journal")
@@ -96,13 +96,24 @@ class VehicleFileDeletionTest {
         journal.save(listOf(VehicleCleanupEntry("token",vehicle.ownerKey,vehicle.id,listOf(owned.path))))
         service().retryPending();assertTrue(owned.exists());assertTrue(vehiclePresent);assertTrue(journal.entries().isEmpty())
     }
+    @Test fun `legacy journal owner cannot make a consolidated living vehicle appear deleted`() = runTest {
+        val owned=file("consolidated")
+        journal.save(listOf(VehicleCleanupEntry("old-token","firebase:old",vehicle.id,listOf(owned.path))))
+        service().retryPending(); assertTrue(owned.exists()); assertTrue(vehiclePresent); assertTrue(journal.entries().isEmpty())
+    }
+    @Test fun `legacy journal after committed deletion retains reference protection and idempotence`() = runTest {
+        val owned=file("legacy-pending"); vehiclePresent=false
+        journal.save(listOf(VehicleCleanupEntry("old-token","guest:local",vehicle.id,listOf(owned.path))))
+        protected+=owned.path; service().retryPending(); assertTrue(owned.exists()); assertEquals(1,journal.entries().size)
+        protected.clear(); service().retryPending(); service().retryPending(); assertFalse(owned.exists()); assertTrue(journal.entries().isEmpty())
+    }
     @Test fun `new reference after cascade is protected by retry check`() = runTest {
         val owned=file("new-reference");failFile=owned.name;failure(VehicleCleanupPendingException::class.java)
         failFile=null;protected += owned.path;service().retryPending()
         assertTrue(owned.exists());assertEquals(1,journal.entries().size)
     }
-    @Test fun `owner change after intent blocks DB delete and preserves files`() = runTest {
-        val owned=file("owned");beforeSave={ session.setAuthenticatedUid("B") };failure()
+    @Test fun `garage unavailable after intent blocks DB delete and preserves files`() = runTest {
+        val owned=file("owned");beforeSave={ session.beginBootstrap() };failure()
         assertTrue(vehiclePresent);assertTrue(owned.exists())
     }
     @Test fun `blocked owner cannot begin deletion`() = runTest {

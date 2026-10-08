@@ -47,9 +47,9 @@ app/src/main/java/com/carmanager/app/
 
 ## 🔒 Confidentialité & Sauvegarde
 
-- **Garage local :** Room et les fichiers de cette installation sont la source des véhicules, historiques et documents, en mode invité comme avec un compte Google. Les espaces invité et comptes restent séparés.
+- **Garage local :** Room et les fichiers de cette installation sont la source des véhicules, historiques et documents, en mode invité comme avec un compte Google. Un garage unique local:device est partagé par toutes les identités Google sur cette installation ; connexion, déconnexion et suppression du compte ne le changent pas. Les espaces locaux historiques sont consolidés sans dédoublonnage.
 - **Connexion :** Google est le seul parcours de connexion proposé ; Firebase conserve l'identité. Une ancienne session déjà ouverte reste accessible jusqu'à sa déconnexion explicite, sans transfert de son garage.
-- **Sauvegarde :** La sauvegarde cloud du garage est inactive. Aucune sauvegarde Drive, restauration cloud ou fusion invité/compte n'est disponible. La perte du téléphone ou la désinstallation peut entraîner la perte des données locales. Git sauvegarde le code source, pas le garage de l'utilisateur.
+- **Sauvegarde :** La sauvegarde cloud du garage est inactive. Aucune sauvegarde Drive, restauration cloud n’est disponible. La perte du téléphone ou la désinstallation peut entraîner la perte des données locales. Git sauvegarde le code source, pas le garage de l'utilisateur.
 - **Services réseau :** Google/Firebase Auth, Google Play Billing et Ads/UMP restent utilisés. Firestore sert uniquement au nettoyage des anciennes collections lors d'une suppression de compte explicitement demandée ; aucun envoi automatique du garage n'est actif.
 
 ---

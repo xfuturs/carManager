@@ -1,12 +1,8 @@
 package com.carmanager.app.features.dashboard
 
-/** Accès à l'action PDF uniquement ; ne représente jamais un entitlement Premium. */
-internal enum class PdfAccess { LOCKED, PREMIUM, DEBUG_TEST }
+/** Accès à la génération PDF selon la propriété Premium réelle. */
+internal enum class PdfAccess { LOCKED, PREMIUM }
 
 internal object PdfAccessPolicy {
-    fun resolve(isDebugBuild: Boolean, isPremium: Boolean): PdfAccess = when {
-        isPremium -> PdfAccess.PREMIUM
-        isDebugBuild -> PdfAccess.DEBUG_TEST
-        else -> PdfAccess.LOCKED
-    }
+    fun resolve(isPremium: Boolean): PdfAccess = if (isPremium) PdfAccess.PREMIUM else PdfAccess.LOCKED
 }

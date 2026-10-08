@@ -3,6 +3,21 @@ package com.carmanager.app.core.ads
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.atomic.AtomicBoolean
+import com.carmanager.app.core.domain.model.PremiumState
+import com.carmanager.app.core.domain.model.PremiumEntitlement
+
+enum class AdsEntitlement { AllowedFree, BlockedPremium, BlockedUnsettled }
+
+/** Disponibilité du produit/prix distincte de la propriété vérifiée auprès de Play. */
+fun premiumAdsEntitlement(state: PremiumState): AdsEntitlement = when {
+    state.isPremium -> AdsEntitlement.BlockedPremium
+    !state.ownershipVerified || state.isPurchasing || state.acknowledgementPending ||
+        state.entitlement != PremiumEntitlement.FREE -> AdsEntitlement.BlockedUnsettled
+    else -> AdsEntitlement.AllowedFree
+}
+
+fun adsEligible(canRequestAds: Boolean, entitlement: AdsEntitlement): Boolean =
+    canRequestAds && entitlement == AdsEntitlement.AllowedFree
 
 enum class AdsPrivacyOptions { REQUIRED, NOT_REQUIRED, UNKNOWN }
 

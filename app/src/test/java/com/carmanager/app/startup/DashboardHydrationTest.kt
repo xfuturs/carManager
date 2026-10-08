@@ -34,7 +34,7 @@ class DashboardHydrationTest {
 
     private class Fixture(scheduler: TestCoroutineScheduler) {
         val session = WorkspaceSession(TestDeletionRegistry())
-        val sources = listOf(WorkspaceOwner.GUEST, "firebase:A", "firebase:B").associateWith { Snapshots(it) }
+        val sources = listOf(com.carmanager.app.core.domain.session.LocalGarageOwner.KEY, "local:device", "firebase:B").associateWith { Snapshots(it) }
         val vehicles = mockk<VehicleRepository>()
         val fuel = mockk<FuelRepository>()
         val maintenance = mockk<MaintenanceRepository>()
@@ -66,12 +66,12 @@ class DashboardHydrationTest {
         runCurrent()
         assertEquals(listOf(LocalDataState.Loading), states)
         verify(exactly = 0) { fixture.vehicles.observeAll() }
-        fixture.session.setAuthenticatedUid(null); runCurrent()
+        fixture.session.completeBootstrap(); runCurrent()
         assertEquals(listOf(LocalDataState.Loading), states)
     }
 
     @Test fun `first nonempty guest snapshot goes directly to coherent content`() = runTest {
-        val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid(null) }
+        val fixture = Fixture(testScheduler).apply { session.completeBootstrap() }
         fixture.current().emitSecondary()
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
@@ -79,7 +79,7 @@ class DashboardHydrationTest {
         assertEquals(2, states.size)
         assertEquals(LocalDataState.Loading, states.first())
         val ready = states.last() as LocalDataState.Ready
-        assertEquals(WorkspaceOwner.GUEST, ready.owner)
+        assertEquals(com.carmanager.app.core.domain.session.LocalGarageOwner.KEY, ready.owner)
         assertEquals(1, ready.data.vehicleCount)
         assertEquals(1, ready.data.vehicles.size)
         assertEquals(18.0, ready.data.monthlyFuelCost)
@@ -88,7 +88,7 @@ class DashboardHydrationTest {
     }
 
     @Test fun `first truly empty snapshot creates the real Empty dashboard`() = runTest {
-        val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid(null) }
+        val fixture = Fixture(testScheduler).apply { session.completeBootstrap() }
         fixture.current().emitSecondary()
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
@@ -102,7 +102,7 @@ class DashboardHydrationTest {
 
     @Test fun `required history queries remain unresolved instead of showing fake final zeros`() = runTest {
         for (delayed in listOf("maintenance", "fuel", "documents")) {
-            val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid("A") }
+            val fixture = Fixture(testScheduler).apply { session.completeBootstrap() }
             fixture.current().emitSecondary(except = delayed)
             fixture.current().vehicles.emit(listOf(fixture.vehicle()))
             val states = mutableListOf<LocalDataState<DashboardStats>>()
@@ -117,46 +117,36 @@ class DashboardHydrationTest {
             }
             runCurrent()
             val ready = states.last() as LocalDataState.Ready
-            assertEquals("firebase:A", ready.owner)
+            assertEquals("local:device", ready.owner)
             assertEquals(1, ready.data.vehicleCount)
             assertEquals(18.0, ready.data.monthlyFuelCost)
             observer.cancel(); runCurrent()
         }
     }
 
-    @Test fun `guest A B and logout rehydrate only the current owner's dashboard`() = runTest {
-        val fixture = Fixture(testScheduler)
-        fixture.sources.values.forEach { it.emitSecondary() }
+    @Test fun `guest A B and logout retain the same coherent dashboard without rehydration`() = runTest {
+        val fixture = Fixture(testScheduler).apply { session.completeBootstrap() }
+        fixture.current().emitSecondary(); fixture.current().vehicles.emit(listOf(fixture.vehicle()))
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(MutableStateFlow(0)).toList(states) }
         runCurrent()
-        for ((index, uid) in listOf(null, "A", "B", null).withIndex()) {
-            fixture.session.setAuthenticatedUid(uid); runCurrent()
-            if (index == 3) { // Guest's real earlier snapshot may be immediately available again.
-                assertTrue(states.last() is LocalDataState.Loading ||
-                    (states.last() as LocalDataState.Ready).owner == WorkspaceOwner.GUEST)
-            } else assertEquals(LocalDataState.Loading, states.last())
-            val vehicle = fixture.vehicle(index + 1L)
-            fixture.current().emitSecondary(vehicleId = vehicle.id)
-            fixture.current().vehicles.emit(listOf(vehicle)); runCurrent()
-            val ready = states.last() as LocalDataState.Ready
-            assertEquals(WorkspaceOwner.fromUid(uid), ready.owner)
-            assertEquals(vehicle, ready.data.vehicles.single().vehicle)
-            assertEquals(1, ready.data.vehicleCount)
-            assertEquals(18.0, ready.data.monthlyFuelCost)
+        val ready = states.last() as LocalDataState.Ready
+        val identity = com.carmanager.app.core.domain.session.AuthSession()
+        for (uid in listOf(null, "A", "B", null)) {
+            identity.setUid(uid); runCurrent(); assertSame(ready, states.last())
+            assertEquals(1, ready.data.vehicleCount); assertEquals(18.0, ready.data.monthlyFuelCost)
             assertEquals(22.0, ready.data.monthlyMaintenanceCost)
         }
-        assertTrue(states.filterIsInstance<LocalDataState.Ready<DashboardStats>>().all {
-            it.data.vehicles.all { stats -> stats.vehicle.ownerKey == it.owner } && it.data.vehicleCount == 1
-        })
+        assertEquals(2, states.size)
+        verify(exactly = 1) { fixture.vehicles.observeAll() }
     }
 
     @Test fun `Dashboard query failure is Error and an explicit retry rehydrates real data`() = runTest {
-        val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid("A"); fail = true }
+        val fixture = Fixture(testScheduler).apply { session.completeBootstrap(); fail = true }
         val retry = MutableStateFlow(0)
         val states = mutableListOf<LocalDataState<DashboardStats>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { fixture.useCase.observeState(retry).toList(states) }
-        runCurrent(); assertEquals(LocalDataState.Error("firebase:A"), states.last())
+        runCurrent(); assertEquals(LocalDataState.Error("local:device"), states.last())
         fixture.fail = false; retry.value++; runCurrent()
         assertEquals(LocalDataState.Loading, states.last())
         fixture.current().emitSecondary(); fixture.current().vehicles.emit(listOf(fixture.vehicle())); runCurrent()
@@ -167,7 +157,7 @@ class DashboardHydrationTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
-            val fixture = Fixture(testScheduler).apply { session.setAuthenticatedUid("A") }
+            val fixture = Fixture(testScheduler).apply { session.completeBootstrap() }
             val settings = mockk<SettingsRepository>().also {
                 every { it.currency } returns flowOf("€")
                 every { it.distanceUnit } returns flowOf("km")
@@ -181,11 +171,11 @@ class DashboardHydrationTest {
             assertEquals(1, (vm.uiState.value as LocalDataState.Ready).data.vehicleCount)
             observer.cancel(); runCurrent(); advanceTimeBy(5001); runCurrent()
             assertEquals(LocalDataState.Loading, vm.uiState.value)
-            fixture.session.setAuthenticatedUid("B")
+            com.carmanager.app.core.domain.session.AuthSession().setUid("B")
             backgroundScope.launch { vm.uiState.collect {} }; runCurrent()
-            assertEquals(LocalDataState.Loading, vm.uiState.value)
+            assertEquals(1L, (vm.uiState.value as LocalDataState.Ready).data.vehicles.single().vehicle.id)
             fixture.current().emitSecondary(); fixture.current().vehicles.emit(listOf(fixture.vehicle(2))); runCurrent()
-            assertEquals("firebase:B", (vm.uiState.value as LocalDataState.Ready).owner)
+            assertEquals("local:device", (vm.uiState.value as LocalDataState.Ready).owner)
             verify(exactly = 0) { premium.initialize() }
         } finally { store.clear(); runCurrent(); Dispatchers.resetMain() }
     }

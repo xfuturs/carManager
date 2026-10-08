@@ -14,8 +14,8 @@ import io.mockk.*
 /** Fake transactionnel : rollback du contrat testé, pas une instance Room Android. */
 class GarageFixture {
     val registry = TestDeletionRegistry()
-    val session = WorkspaceSession(registry).apply { setAuthenticatedUid("A") }
-    val vehicles = linkedMapOf(1L to testVehicle("firebase:A", 1).copy(currentMileage = 1000, createdAt = 77, updatedAt = 88,
+    val session = WorkspaceSession(registry).apply { completeBootstrap() }
+    val vehicles = linkedMapOf(1L to testVehicle("local:device", 1).copy(currentMileage = 1000, createdAt = 77, updatedAt = 88,
         remoteId = "legacy-id", syncStatus = "LEGACY"), 2L to testVehicle("firebase:B", 2))
     val fuelRows = mutableListOf<FuelRecordEntity>()
     val maintenanceRows = mutableListOf<MaintenanceRecordEntity>()
@@ -92,14 +92,14 @@ class GarageFixture {
         coEvery { mileageDao.insert(any()) } coAnswers {
             val id = history.size.toLong() + 1
             history += firstArg<MileageRecordEntity>().copy(id = id)
-            if (changeOwnerAfterHistory) session.setAuthenticatedUid("B")
+            if (changeOwnerAfterHistory) session.beginBootstrap()
             if (failAt == "history") error("Injected journal failure")
             id
         }
     }
     fun vehicle(): Vehicle = checkNotNull(vehicles[1]).toDomain()
     fun mileageRepository() = MileageRepositoryImpl(mileageDao, session, access, writer)
-    fun fuel(value: Int = 1500) = FuelRecord(ownerKey = "firebase:A", vehicleId = 1, date = 0, mileage = value, liters = 12.5, totalPrice = 25.5)
-    fun maintenance(value: Int = 1500) = MaintenanceRecord(ownerKey = "firebase:A", vehicleId = 1, type = MaintenanceType.OIL_CHANGE,
+    fun fuel(value: Int = 1500) = FuelRecord(ownerKey = "local:device", vehicleId = 1, date = 0, mileage = value, liters = 12.5, totalPrice = 25.5)
+    fun maintenance(value: Int = 1500) = MaintenanceRecord(ownerKey = "local:device", vehicleId = 1, type = MaintenanceType.OIL_CHANGE,
         date = 0, mileage = value, cost = 12.5)
 }

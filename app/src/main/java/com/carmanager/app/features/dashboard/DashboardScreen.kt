@@ -36,7 +36,6 @@ import com.carmanager.app.R
 import com.carmanager.app.core.domain.model.DashboardStats
 import com.carmanager.app.core.domain.model.MaintenanceType
 import com.carmanager.app.core.domain.model.Vehicle
-import com.carmanager.app.core.ui.components.BannerAdSlot
 import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.components.DashboardStatItem
 import com.carmanager.app.core.ui.components.DashboardVehicleCard
@@ -55,7 +54,6 @@ import com.carmanager.app.core.util.DateFormatter
 
 @Composable
 fun DashboardScreen(
-    canShowAds: Boolean,
     onAddVehicle: () -> Unit,
     onEditVehicle: (Long) -> Unit,
     onNavigateToFuel: (Long) -> Unit,
@@ -92,7 +90,6 @@ fun DashboardScreen(
             }
         }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = { if (canShowAds) BannerAdSlot() },
         floatingActionButton = {
             FloatingActionButton(
                 modifier = Modifier.onSizeChanged { fabHeightPixels = it.height },

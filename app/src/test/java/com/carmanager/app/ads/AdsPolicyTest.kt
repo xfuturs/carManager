@@ -36,7 +36,7 @@ class AdsPolicyTest {
         val workspace = WorkspaceSession(TestDeletionRegistry())
         premium.initialize(); runCurrent()
         for (uid in listOf(null, "firebase-A", "firebase-B", null)) {
-            workspace.setAuthenticatedUid(uid)
+            workspace.completeBootstrap()
             runCurrent()
             assertTrue(adsEligible(true, premium.isPremium.value))
             assertEquals(1, gateway.queryCalls)

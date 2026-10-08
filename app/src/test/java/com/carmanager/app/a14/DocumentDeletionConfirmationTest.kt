@@ -29,7 +29,7 @@ class DocumentDeletionConfirmationTest {
             val privateDir = File(directory, "vehicle_documents").apply { mkdirs() }
             val privateFile = File(privateDir,"report.pdf").apply { writeText("%PDF-private") }
             val external = File(directory,"external-copy.pdf").apply { writeText("%PDF-external") }
-            val document = Document(4,1,"Document", category,privateFile.path,123,"firebase:A")
+            val document = Document(4,1,"Document", category,privateFile.path,123,"local:device")
             every { repo.observeByVehicle(1) } returns flowOf(listOf(document))
             coEvery { repo.deleteDocument(any()) } just Runs
             coEvery { garage.access.documentFile(any(),any(),any(),any()) } coAnswers {
@@ -51,8 +51,8 @@ class DocumentDeletionConfirmationTest {
         assertNull(vm.pendingDeletion); assertFalse(file.exists()); assertEquals("%PDF-external",copy.readText())
         coVerify(exactly = 1) { repo.deleteDocument(doc) }
     }
-    @Test fun `owner change while confirmation is open prevents file and row deletion`() = scenario(DocumentCategory.REPORTS) { vm,repo,doc,file,_,garage ->
-        vm.requestDeletion(doc); garage.session.setAuthenticatedUid("B"); vm.confirmDeletion(); runCurrent()
+    @Test fun `garage unavailable while confirmation is open prevents file and row deletion`() = scenario(DocumentCategory.REPORTS) { vm,repo,doc,file,_,garage ->
+        vm.requestDeletion(doc); garage.session.beginBootstrap(); vm.confirmDeletion(); runCurrent()
         assertNull(vm.pendingDeletion); assertTrue(file.exists()); coVerify(exactly = 0) { repo.deleteDocument(any()) }
     }
     @Test fun `foreign owner or other vehicle cannot open a confirmation`() = scenario(DocumentCategory.REPORTS) { vm,_,doc,_,_,_ ->
@@ -60,7 +60,7 @@ class DocumentDeletionConfirmationTest {
         vm.requestDeletion(doc.copy(vehicleId = 2)); assertNull(vm.pendingDeletion)
     }
     @Test fun `blocked owner after confirmation retains local data`() = scenario(DocumentCategory.REPORTS) { vm,repo,doc,file,_,garage ->
-        vm.requestDeletion(doc); garage.registry.block("firebase:A"); vm.confirmDeletion(); runCurrent()
+        vm.requestDeletion(doc); garage.registry.block("local:device"); vm.confirmDeletion(); runCurrent()
         assertTrue(file.exists()); coVerify(exactly = 0) { repo.deleteDocument(any()) }
     }
 }

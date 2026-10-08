@@ -119,11 +119,11 @@
     <!-- Auth & Premium -->
     <string name="login_title">Connexion</string>
     <string name="login_google">Continuer avec Google</string>
-    <string name="login_desc">Le garage reste sur cet appareil, dans un espace distinct par compte. Google sert à vous connecter ; la sauvegarde cloud du garage est inactive. Le mode invité reste disponible et séparé.</string>
+    <string name="login_desc">Votre garage reste enregistré localement sur cet appareil, avec ou sans connexion Google. Il n’est pas synchronisé avec votre compte.</string>
 
     <string name="premium_status_connected">Connecté en tant que :</string>
     <string name="premium_logout">Se déconnecter</string>
-    <string name="premium_delete_account">Supprimer mon compte et mes données</string>
+    <string name="premium_delete_account">Supprimer mon compte</string>
     <string name="premium_account_section">Compte</string>
     <string name="premium_title">Premium</string>
     <string name="premium_benefits">Vos avantages Premium — achat unique via Google Play, disponible aussi en mode invité.</string>

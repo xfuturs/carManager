@@ -25,5 +25,5 @@ data class VehicleEntity(
     val remoteId: String? = null,
     val syncStatus: String = "LOCAL",
     @ColumnInfo(defaultValue = "'guest:local'")
-    val ownerKey: String = "guest:local",
+    val ownerKey: String = com.carmanager.app.core.domain.session.LocalGarageOwner.KEY,
 )

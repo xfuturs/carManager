@@ -44,7 +44,8 @@ class VehicleFileDeletion internal constructor(
             database.documentDao().getByVehicle(vehicle.id, vehicle.ownerKey).map { IndexedVehicleFile(it.id, it.filePath) }
         } },
         { vehicle -> if (vehicle == null) database.documentDao().allFilePaths() else database.documentDao().filePathsOutsideVehicle(vehicle) },
-        { owner, id -> database.vehicleDao().getById(id, owner) != null },
+        // Les IDs sont globaux : un owner legacy journalisé ne doit jamais rendre un véhicule vivant absent.
+        { _, id -> database.vehicleDao().existsById(id) },
         { vehicle, captured -> access.write(vehicle.ownerKey, vehicle.id) {
             val current = database.documentDao().getByVehicle(vehicle.id, vehicle.ownerKey).map { IndexedVehicleFile(it.id, it.filePath) }
             check(current.toSet() == captured.toSet()) { "Les documents ont changé. Réessayez la suppression." }

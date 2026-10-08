@@ -13,9 +13,11 @@ class CarManagerApplication : Application() {
     // Creation process-scoped du compteur, sans requete publicitaire au constructeur.
     @Inject lateinit var interstitials: InterstitialAdManager
     @Inject lateinit var reminders: com.carmanager.app.core.util.LocalReminderCoordinator
+    @Inject lateinit var garage: com.carmanager.app.core.data.local.LocalGarageBootstrap
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createNotificationChannel(this)
+        garage.start()
         reminders.start()
     }
 }

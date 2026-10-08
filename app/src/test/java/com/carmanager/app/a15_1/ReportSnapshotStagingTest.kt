@@ -40,16 +40,16 @@ class ReportSnapshotStagingTest {
             garage.session.requireWritable(firstArg()); inRead=true; reads++; frozen=liveMileage
             try { thirdArg<suspend () -> Any>()().also { garage.session.requireWritable(firstArg()) } } finally { inRead=false }
         }
-        coEvery { garage.vehicleDao.getById(1,"firebase:A") } coAnswers {
+        coEvery { garage.vehicleDao.getById(1,"local:device") } coAnswers {
             assertTrue(inRead); garage.vehicles[1]!!.copy(currentMileage=frozen).also { liveMileage=2000 }
         }
-        coEvery { garage.fuelDao.getByVehicle(1,"firebase:A") } coAnswers {
+        coEvery { garage.fuelDao.getByVehicle(1,"local:device") } coAnswers {
             assertTrue(inRead); listOf(FuelRecordEntity(1,1,0,frozen,10.0,20.0))
         }
-        coEvery { garage.maintenanceDao.getByVehicle(1,"firebase:A") } coAnswers {
+        coEvery { garage.maintenanceDao.getByVehicle(1,"local:device") } coAnswers {
             assertTrue(inRead); listOf(MaintenanceRecordEntity(1,1,MaintenanceTypeEntity.OIL_CHANGE,date=0,mileage=frozen,cost=20.0))
         }
-        coEvery { garage.mileageDao.getByVehicle(1,"firebase:A") } coAnswers {
+        coEvery { garage.mileageDao.getByVehicle(1,"local:device") } coAnswers {
             assertTrue(inRead); listOf(MileageRecordEntity(1,1,0,frozen,"MANUAL"))
         }
         return OwnedReportSnapshotReader(garage.session,database,garage.access)
@@ -81,7 +81,7 @@ class ReportSnapshotStagingTest {
         val data=reader().read(1)!!
         assertEquals(1,reads); assertFalse(inRead); assertEquals(2000,liveMileage)
         assertEquals(listOf(1000,1000,1000,1000),listOf(data.vehicle.currentMileage,data.fuelRecords.single().mileage,data.maintenanceRecords.single().mileage,data.mileageRecords.single().mileage))
-        coVerify(exactly=1) { garage.access.read<Any>("firebase:A",1,any()) }
+        coVerify(exactly=1) { garage.access.read<Any>("local:device",1,any()) }
     }
     @Test fun `foreign source owner or wrong parent is rejected`()=runTest {
         for (data in listOf(
@@ -91,10 +91,10 @@ class ReportSnapshotStagingTest {
         }
     }
     @Test fun `blocked owner is rejected before snapshot query`()=runTest {
-        val reader=reader(); garage.registry.block("firebase:A"); rejected { reader.read(1) }; assertEquals(0,reads)
+        val reader=reader(); garage.registry.block("local:device"); rejected { reader.read(1) }; assertEquals(0,reads)
     }
-    @Test fun `owner changing during snapshot prevents data escape`()=runTest {
-        val reader=OwnedReportSnapshotReader(garage.session) { _, _ -> garage.session.setAuthenticatedUid("B"); GenerateVehicleReportUseCase.ReportData(garage.vehicle(),emptyList(),emptyList()) }
+    @Test fun `garage unavailable during snapshot prevents data escape`()=runTest {
+        val reader=OwnedReportSnapshotReader(garage.session) { _, _ -> garage.session.beginBootstrap(); GenerateVehicleReportUseCase.ReportData(garage.vehicle(),emptyList(),emptyList()) }
         rejected { reader.read(1) }
     }
     @Test fun `render starts after snapshot closes and metadata commit stays owned and short`()=runTest {
@@ -107,8 +107,8 @@ class ReportSnapshotStagingTest {
         try { service()(1); fail<Unit>("failure") } catch (_: IOException) {}
         assertTrue(root.listFiles()!!.isEmpty()); assertTrue(indexed.isEmpty())
     }
-    @Test fun `owner changed after render is revalidated and staged report removed`()=runTest {
-        afterRender={ garage.session.setAuthenticatedUid("B") }; rejected { service()(1) }
+    @Test fun `garage unavailable after render is revalidated and staged report removed`()=runTest {
+        afterRender={ garage.session.beginBootstrap() }; rejected { service()(1) }
         assertTrue(root.listFiles()!!.isEmpty()); assertTrue(indexed.isEmpty()); coVerify(exactly=0) { documents.saveDocument(any()) }
     }
     @Test fun `deleted vehicle after render fails commit and cleans report`()=runTest {

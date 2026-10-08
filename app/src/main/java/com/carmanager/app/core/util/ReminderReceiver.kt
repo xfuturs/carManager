@@ -41,6 +41,7 @@ class ReminderReceiver : BroadcastReceiver() {
         // Les anciennes alarmes sans propriétaire correspondent aux données migrées invitées.
         val owner = intent.getStringExtra("ownerKey") ?: WorkspaceOwner.GUEST
         session.isResolved.first { it }
+        if (owner != com.carmanager.app.core.domain.session.LocalGarageOwner.KEY) return
         val id = intent.getLongExtra("recordId", 0)
         // Les anciennes URI sont annulées par réconciliation et ne peuvent plus livrer.
         val lead = intent.getIntExtra("leadDays", -1)

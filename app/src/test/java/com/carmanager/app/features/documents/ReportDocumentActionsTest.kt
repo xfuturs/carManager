@@ -17,11 +17,11 @@ import java.io.*
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ReportDocumentActionsTest {
     @TempDir lateinit var directory: File
-    private val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid("A") }
+    private val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
     private val bytes = ByteArray(40_000) { (it % 123).toByte() }
     private val source by lazy { File(directory, "saved.pdf").apply { writeBytes(bytes) } }
     private val document get() = Document(1, 7, "Rapport du 03/10/2026", DocumentCategory.REPORTS,
-        source.path, 0, "firebase:A")
+        source.path, 0, "local:device")
     private val presented = mutableListOf<Pair<File, Boolean>>()
     private var resolves = 0
     private var resolveHook: () -> Unit = {}
@@ -60,10 +60,10 @@ class ReportDocumentActionsTest {
         actions().share(document); assertEquals(source to true, presented.single()); assertArrayEquals(bytes, source.readBytes())
     }
     @Test fun `owner switch refuses stale report`() = runTest {
-        val doc = document; session.setAuthenticatedUid("B"); rejects { actions().open(doc) }; assertEquals(0, resolves)
+        val doc = document; session.beginBootstrap(); rejects { actions().open(doc) }; assertEquals(0, resolves)
     }
     @Test fun `owner switch during file resolution refuses sharing`() = runTest {
-        resolveHook = { session.setAuthenticatedUid("B") }; rejects { actions().share(document) }
+        resolveHook = { session.beginBootstrap() }; rejects { actions().share(document) }
     }
     @Test fun `non report cannot enter report actions`() = runTest {
         rejects { actions().open(document.copy(category = DocumentCategory.PHOTOS)) }; assertEquals(0, resolves)

@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.carmanager.app.R
-import com.carmanager.app.core.ui.components.BannerAdSlot
 import com.carmanager.app.core.ui.components.LocalDataContent
 import com.carmanager.app.core.ui.components.VehicleItem
 import com.carmanager.app.core.ui.theme.VehicleColor
@@ -32,7 +31,6 @@ import com.carmanager.app.core.ui.theme.VehicleColor
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VehiclesScreen(
-    canShowAds: Boolean,
     onNavigateBack: () -> Unit,
     onAddVehicle: () -> Unit,
     onEditVehicle: (Long) -> Unit,
@@ -49,7 +47,6 @@ fun VehiclesScreen(
         topBar = {
             CarManagerBackAppBar(title = stringResource(R.string.vehicles_title), onNavigateBack = onNavigateBack)
         },
-        bottomBar = { if (canShowAds) BannerAdSlot() },
         floatingActionButton = {
             FloatingActionButton(
                 modifier = Modifier.onSizeChanged { fabHeightPixels = it.height },

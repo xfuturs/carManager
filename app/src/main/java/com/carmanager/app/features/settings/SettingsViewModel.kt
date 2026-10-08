@@ -22,6 +22,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+internal object LogoutConfirmationCopy {
+    const val TITLE = "Se déconnecter ?"
+    const val BODY = "Votre garage restera enregistré localement sur cet appareil."
+}
+
 @HiltViewModel
 class SettingsViewModel internal constructor(
     private val settingsRepository: SettingsRepository,
@@ -79,11 +84,28 @@ class SettingsViewModel internal constructor(
     val deletionState = deletion.state
     private val _accountError = MutableStateFlow<String?>(null)
     val accountError = _accountError.asStateFlow()
-    val deletionPending = combine(session.owner, registry.blockedOwners) { owner, blocked -> owner in blocked }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), session.owner.value in registry.blockedOwners.value)
+    private val _logoutConfirmation = MutableStateFlow(false)
+    val logoutConfirmation = _logoutConfirmation.asStateFlow()
+    private val _logoutRunning = MutableStateFlow(false)
+    val logoutRunning = _logoutRunning.asStateFlow()
+    val deletionPending = combine(authRepository.currentUser, registry.blockedOwners) { user, blocked ->
+        user != null && com.carmanager.app.core.domain.session.WorkspaceOwner.fromUid(user.id) in blocked
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    fun signOut() {
-        if (deletionState.value.running) return
+    fun requestSignOut() {
+        if (currentUser.value != null && !deletionState.value.running && !_logoutRunning.value) {
+            _logoutConfirmation.value = true
+        }
+    }
+
+    fun cancelSignOut() { _logoutConfirmation.value = false }
+
+    fun confirmSignOut() {
+        if (!_logoutConfirmation.value || _logoutRunning.value || deletionState.value.running) return
+        _logoutConfirmation.value = false
+        if (currentUser.value == null) return
+        // Verrouiller avant launch : deux clics dans la même frame ne soumettent qu'une fois.
+        _logoutRunning.value = true
         viewModelScope.launch {
             try {
                 _accountError.value = null
@@ -91,6 +113,8 @@ class SettingsViewModel internal constructor(
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _accountError.value = e.message ?: "Déconnexion impossible."
+            } finally {
+                _logoutRunning.value = false
             }
         }
     }

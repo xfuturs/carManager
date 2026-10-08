@@ -17,7 +17,7 @@ class DisabledSyncRepositoryTest {
             val sync = DisabledSyncRepository()
             val session = WorkspaceSession(TestDeletionRegistry())
             for (uid in listOf(null, "A", "B", null, "A")) {
-                session.setAuthenticatedUid(uid)
+                session.completeBootstrap()
                 sync.startAutoSync()
                 sync.stopSync()
                 assertEquals(GarageSyncStatus.DISABLED, sync.status.value)

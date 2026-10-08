@@ -58,7 +58,7 @@ class HistoryPresentationStateTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
-            val session = WorkspaceSession(TestDeletionRegistry()).apply { if (resolved) setAuthenticatedUid(null) }
+            val session = WorkspaceSession(TestDeletionRegistry()).apply { if (resolved) completeBootstrap() }
             val fixtures = fixtures(session, failFirst)
             fixtures.forEachIndexed { i, f -> store.put("$i", f.vm) }
             body(session, fixtures)
@@ -100,11 +100,13 @@ class HistoryPresentationStateTest {
         runCurrent(); fixtures.forEach { assertTrue(it.state.value is LocalDataState.Ready) }
     }
 
-    @Test fun `owner changes clear old Ready before the next owner emits`() = scenario { session, fixtures ->
+    @Test fun `garage bootstrap suppresses cached Ready until resolution`() = scenario { session, fixtures ->
         observe(fixtures); runCurrent(); fixtures.forEach { it.emit(false) }; runCurrent()
-        session.setAuthenticatedUid("B"); runCurrent()
+        session.beginBootstrap(); runCurrent()
         fixtures.forEach { assertEquals(LocalDataState.Loading, it.state.value); it.emit(true) }
-        runCurrent(); fixtures.forEach { assertEquals(LocalDataState.Ready("firebase:B", emptyList<Any>()), it.state.value) }
+        runCurrent(); fixtures.forEach { assertEquals(LocalDataState.Loading,it.state.value) }
+        session.completeBootstrap(); runCurrent(); fixtures.forEach { it.emit(true) }; runCurrent()
+        fixtures.forEach { assertEquals(LocalDataState.Ready("local:device",emptyList<Any>()),it.state.value) }
     }
 
     @Test fun `stopped histories reset replay and return Loading on resubscription`() = scenario { _, fixtures ->

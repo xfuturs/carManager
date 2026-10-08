@@ -69,7 +69,7 @@ class FormErrorBoundaryTest {
     @Test fun `stale vehicle load never overwrites typed input after owner transition`()=runTest(dispatcher) {
         val gate=CompletableDeferred<Unit>(); source=flow { gate.await(); emit(garage.vehicle()) }
         val vm=vehicle(); runCurrent(); vm.onBrandChange("Saisie manuelle",true)
-        garage.session.setAuthenticatedUid("B"); gate.complete(Unit); runCurrent()
+        garage.session.beginBootstrap(); gate.complete(Unit); runCurrent()
         assertEquals("Saisie manuelle",vm.brand); assertNotNull(vm.loadError); assertFalse(vm.isVehicleLoading)
     }
     @Test fun `fuel load failure keeps manual input and retry restores real mileage`()=runTest(dispatcher) {
@@ -129,12 +129,12 @@ class FormErrorBoundaryTest {
     @Test fun `Coach missing vehicle reaches ready unavailable rather than eternal loading`()=runTest(dispatcher) {
         source=flowOf(null); val vm=MaintenanceAdviceViewModel(vehicles,handle,garage.session); store.put("coach",vm)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }; runCurrent()
-        assertEquals(LocalDataState.Ready<Vehicle?>("firebase:A",null),vm.uiState.value)
+        assertEquals(LocalDataState.Ready<Vehicle?>("local:device",null),vm.uiState.value)
     }
     @Test fun `Coach source exception reaches Error and explicit retry reaches Ready`()=runTest(dispatcher) {
         source=flow { throw IOException("database") }; val vm=MaintenanceAdviceViewModel(vehicles,handle,garage.session); store.put("coach",vm)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }; runCurrent()
-        assertEquals(LocalDataState.Error("firebase:A"),vm.uiState.value)
-        source=flowOf(garage.vehicle()); vm.retryLoading(); runCurrent(); assertEquals(LocalDataState.Ready("firebase:A",garage.vehicle()),vm.uiState.value)
+        assertEquals(LocalDataState.Error("local:device"),vm.uiState.value)
+        source=flowOf(garage.vehicle()); vm.retryLoading(); runCurrent(); assertEquals(LocalDataState.Ready("local:device",garage.vehicle()),vm.uiState.value)
     }
 }

@@ -6,7 +6,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import com.carmanager.app.core.util.NotificationHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +16,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
-    private val session: com.carmanager.app.core.domain.session.WorkspaceSession,
+    private val session: com.carmanager.app.core.domain.session.AuthSession,
     private val sync: com.carmanager.app.core.domain.repository.SyncRepository,
     private val deletion: com.carmanager.app.core.domain.session.AccountDeletion,
     @ApplicationContext private val context: Context
@@ -29,11 +28,10 @@ class AuthRepositoryImpl @Inject constructor(
     override val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
     init {
-        session.setAuthenticatedUid(auth.currentUser?.uid)
+        session.setUid(auth.currentUser?.uid)
         auth.addAuthStateListener { firebaseAuth ->
             val firebaseUser = firebaseAuth.currentUser
-            session.setAuthenticatedUid(firebaseUser?.uid)
-            NotificationHelper.clearInactiveNotifications(context, session.owner.value)
+            session.setUid(firebaseUser?.uid)
             _currentUser.value = firebaseUser?.let { 
                 User(id = it.uid, email = it.email) 
             }
@@ -55,7 +53,7 @@ class AuthRepositoryImpl @Inject constructor(
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
             sync.stopSync()
             auth.signOut()
-            session.setAuthenticatedUid(null)
+            session.setUid(null)
         }
     }
 

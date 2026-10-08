@@ -17,18 +17,22 @@ class WorkspaceSessionTest {
         assertThrows(IllegalArgumentException::class.java) { WorkspaceOwner.fromUid("") }
     }
 
-    @Test fun `stale forms and deletion blocked owners cannot write`() = runTest {
+    @Test fun `canonical guards block legacy owners and unresolved writes but not account deletion`() = runTest {
         val registry = TestDeletionRegistry()
         val session = WorkspaceSession(registry)
-        val guest = session.owner.value
-        session.setAuthenticatedUid("A")
-        assertThrows(IllegalStateException::class.java) { session.requireWritable(guest) }
-        session.requireWritable("firebase:A")
-        registry.block("firebase:A")
-        assertThrows(IllegalStateException::class.java) { session.requireWritable("firebase:A") }
-        session.setAuthenticatedUid("B")
-        session.requireWritable("firebase:B")
-        session.setAuthenticatedUid(null)
-        session.requireWritable(guest)
+        val local = session.owner.value
+        assertEquals("local:device", local)
+        assertThrows(IllegalStateException::class.java) { session.requireWritable(local) }
+        session.completeBootstrap()
+        session.requireWritable(local)
+        for (owner in listOf("guest:local", "firebase:A", "firebase:B")) {
+            assertThrows(IllegalStateException::class.java) { session.requireWritable(owner) }
+            registry.block(owner)
+        }
+        session.requireWritable(local)
+        session.beginBootstrap()
+        assertThrows(IllegalStateException::class.java) { session.requireWritable(local) }
+        session.completeBootstrap(); registry.block(local)
+        assertThrows(IllegalStateException::class.java) { session.requireWritable(local) }
     }
 }

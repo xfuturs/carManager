@@ -11,11 +11,11 @@ import androidx.compose.ui.unit.dp
 
 /** Slot mesure du bottomBar : jamais superpose au contenu ni au FAB du Scaffold. */
 @Composable
-fun BannerAdSlot() {
+fun BannerAdSlot(visible: Boolean = true) {
     Card(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth(),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = if (visible) 8.dp else 0.dp).fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) { BannerAd() }
+    ) { BannerAd(visible = visible) }
 }

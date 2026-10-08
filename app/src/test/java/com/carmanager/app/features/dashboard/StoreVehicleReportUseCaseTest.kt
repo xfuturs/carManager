@@ -17,7 +17,7 @@ import java.io.IOException
 class StoreVehicleReportUseCaseTest {
     @TempDir lateinit var directory: File
     private val registry = TestDeletionRegistry()
-    private val session = WorkspaceSession(registry).apply { setAuthenticatedUid("A") }
+    private val session = WorkspaceSession(registry).apply { completeBootstrap() }
     private val owner get() = session.owner.value
     private val repository = mockk<DocumentRepository>()
     private val rows = mutableListOf<Document>()
@@ -56,7 +56,7 @@ class StoreVehicleReportUseCaseTest {
     }
     @Test fun `successful report is durable indexed and owned`() = runTest {
         val doc = useCase()(7)
-        assertEquals(DocumentCategory.REPORTS, doc.category); assertEquals("firebase:A", doc.ownerKey)
+        assertEquals(DocumentCategory.REPORTS, doc.category); assertEquals("local:device", doc.ownerKey)
         assertEquals(7, doc.vehicleId); assertTrue(doc.title.startsWith("Rapport du "))
         assertEquals(doc, rows.single()); assertTrue(File(doc.filePath).length() > 0)
         assertEquals(doc, rows.single().copy()); assertEquals(1, directory.listFiles()!!.size)
@@ -68,8 +68,8 @@ class StoreVehicleReportUseCaseTest {
     }
     @Test fun `render failure creates neither file nor row`() = runTest { failRender = true; fails(IOException::class.java) }
     @Test fun `database rejection deletes newly generated file`() = runTest { failInsert = true; fails(IOException::class.java) }
-    @Test fun `switch during rendering rolls back and cleans file`() = runTest { afterRender = { session.setAuthenticatedUid("B") }; fails() }
-    @Test fun `switch before transaction commit rolls back and cleans file`() = runTest { beforeCommit = { session.setAuthenticatedUid("B") }; fails() }
+    @Test fun `switch during rendering rolls back and cleans file`() = runTest { afterRender = { session.beginBootstrap() }; fails() }
+    @Test fun `switch before transaction commit rolls back and cleans file`() = runTest { beforeCommit = { session.beginBootstrap() }; fails() }
     @Test fun `missing vehicle creates nothing`() = runTest { report = null; fails() }
     @Test fun `foreign owner cannot generate`() = runTest { report = report!!.copy(vehicle = report!!.vehicle.copy(ownerKey = "firebase:B")); fails() }
     @Test fun `wrong vehicle cannot generate`() = runTest { report = report!!.copy(vehicle = report!!.vehicle.copy(id = 9)); fails() }

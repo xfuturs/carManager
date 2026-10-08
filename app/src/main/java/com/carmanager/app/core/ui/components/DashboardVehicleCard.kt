@@ -26,6 +26,7 @@ import com.carmanager.app.core.ui.theme.*
 import com.carmanager.app.core.util.DateFormatter
 import java.text.NumberFormat
 import java.util.Locale
+import com.carmanager.app.core.ui.navigation.rememberTimedInterstitialBlocker
 
 @Composable
 fun DashboardVehicleCard(
@@ -45,6 +46,7 @@ fun DashboardVehicleCard(
     val units = LocalAppUnits.current
     var showMileageDialog by remember(vehicle.id) { mutableStateOf(false) }
     var mileageInput by remember(vehicle.id) { mutableStateOf(vehicle.currentMileage.toString()) }
+    val blockInterstitials = rememberTimedInterstitialBlocker()
     Card(
         modifier = modifier.fillMaxWidth(), shape = CarManagerShapes.card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -64,7 +66,7 @@ fun DashboardVehicleCard(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(
-                    onClick = { mileageInput = vehicle.currentMileage.toString(); showMileageDialog = true },
+                    onClick = { blockInterstitials(true); mileageInput = vehicle.currentMileage.toString(); showMileageDialog = true },
                     enabled = mileageSaveEnabled,
                     modifier = Modifier.weight(1f).heightIn(min = CarManagerDimensions.touchTarget),
                     contentPadding = PaddingValues(horizontal = CarManagerSpacing.small)
@@ -123,11 +125,12 @@ fun DashboardVehicleCard(
         MileageUpdateDialog(
             vehicleName = "${vehicle.brand} ${vehicle.model}", minimumMileage = vehicle.currentMileage,
             enabled = mileageSaveEnabled, initialValue = mileageInput,
-            onDismiss = { showMileageDialog = false },
+            onDismiss = { showMileageDialog = false; blockInterstitials(false) },
             onConfirm = {
                 mileageInput = it
                 it.toIntOrNull()?.let { km -> onMileageUpdate(km) }
                 showMileageDialog = false
+                blockInterstitials(false)
             }
         )
     }

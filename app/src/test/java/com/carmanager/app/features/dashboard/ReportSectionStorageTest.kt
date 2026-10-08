@@ -16,8 +16,8 @@ import java.io.File
 
 class ReportSectionStorageTest {
     @TempDir lateinit var directory: File
-    private val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid("A") }
-    private val owner = "firebase:A"
+    private val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
+    private val owner = "local:device"
     private val repository = mockk<DocumentRepository>()
     private val rows = mutableListOf<Document>()
     private val captured = mutableListOf<GenerateVehicleReportUseCase.ReportData>()

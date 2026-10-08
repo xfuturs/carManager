@@ -15,9 +15,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 @Singleton
-class GooglePlayBillingGateway @Inject constructor(@ApplicationContext context: Context) :
+class GooglePlayBillingGateway @Inject constructor(@ApplicationContext context: Context,
+    private val diagnostics: AndroidPremiumDiagnostics) :
     PlayBillingGateway, PurchasesUpdatedListener {
     private val updates = Channel<BillingEvent>(Channel.UNLIMITED)
     override val events = updates.receiveAsFlow()
@@ -31,17 +34,22 @@ class GooglePlayBillingGateway @Inject constructor(@ApplicationContext context: 
 
     private class OfferSnapshot(val details: ProductDetails, val offer: PremiumOffer, val token: String, val fetchedAt: Long)
     private var snapshot: OfferSnapshot? = null
+    private val connectionEpoch = AtomicLong(0)
 
     override suspend fun connect(): BillingOutcome {
         if (client.isReady) return BillingOutcome.OK
+        diagnostics.record(PremiumDiagnostic.Connecting, null)
         return awaitReply<Unit>("connect") { complete ->
             if (client.connectionState == BillingClient.ConnectionState.CONNECTING) {
                 complete(BillingReply(BillingOutcome.UNAVAILABLE))
             } else client.startConnection(object : BillingClientStateListener {
                 override fun onBillingSetupFinished(result: BillingResult) {
+                    if (result.responseCode == BillingClient.BillingResponseCode.OK) diagnostics.record(PremiumDiagnostic.Ready, BillingOutcome.OK)
                     complete(BillingReply(outcome("connect", result), Unit))
                 }
                 override fun onBillingServiceDisconnected() {
+                    connectionEpoch.incrementAndGet()
+                    diagnostics.record(PremiumDiagnostic.Disconnected, null)
                     snapshot = null
                     updates.trySend(BillingEvent.Disconnected)
                     // Pas de boucle startConnection ; prochain resume/refresh ou reconnexion SDK.
@@ -50,9 +58,15 @@ class GooglePlayBillingGateway @Inject constructor(@ApplicationContext context: 
         }.outcome
     }
 
-    override suspend fun queryPurchases(): BillingReply<List<PlayPurchase>> = awaitReply("ownership") { complete ->
+    override suspend fun queryPurchases(): BillingReply<List<PlayPurchase>> {
+        val epoch = connectionEpoch.get()
+        return awaitReply("ownership") { complete ->
         client.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build()) { result, purchases ->
-            complete(BillingReply(outcome("ownership", result), purchases.map(::purchase)))
+            if (epoch != connectionEpoch.get() || !client.isReady) {
+                diagnostics.record(PremiumDiagnostic.StaleOwnershipReply, null)
+                complete(BillingReply(BillingOutcome.UNAVAILABLE))
+            } else complete(BillingReply(outcome("ownership", result), purchases.map(::purchase)))
+        }
         }
     }
 
@@ -134,15 +148,22 @@ class GooglePlayBillingGateway @Inject constructor(@ApplicationContext context: 
         return value
     }
 
-    private suspend fun <T> awaitReply(operation: String, request: ((BillingReply<T>) -> Unit) -> Unit): BillingReply<T> =
-        withTimeoutOrNull(15_000L) {
-            suspendCancellableCoroutine { continuation ->
+    private suspend fun <T> awaitReply(operation: String, request: ((BillingReply<T>) -> Unit) -> Unit): BillingReply<T> {
+        val reply: BillingReply<T>? = try { withTimeoutOrNull(15_000L) {
+            suspendCancellableCoroutine<BillingReply<T>> { continuation ->
+                val completed = AtomicBoolean(false)
                 try {
-                    request { if (continuation.isActive) continuation.resume(it) }
+                    request { if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(it) }
                 } catch (_: Exception) {
                     Log.w("PlayBilling", "$operation: failure")
-                    if (continuation.isActive) continuation.resume(BillingReply(BillingOutcome.ERROR))
+                    if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(BillingReply(BillingOutcome.ERROR))
                 }
             }
-        } ?: BillingReply(BillingOutcome.UNAVAILABLE)
+        } } catch (error: kotlinx.coroutines.CancellationException) {
+            diagnostics.record(PremiumDiagnostic.ReplyCanceled, null)
+            throw error
+        }
+        if (reply == null) diagnostics.record(PremiumDiagnostic.ReplyTimeout, BillingOutcome.UNAVAILABLE)
+        return reply ?: BillingReply(BillingOutcome.UNAVAILABLE)
+    }
 }

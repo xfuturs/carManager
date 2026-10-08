@@ -37,6 +37,7 @@ import com.carmanager.app.core.util.GoogleMobileAdsConsentManager
 import com.carmanager.app.core.ads.MobileAdsInitializer
 import com.carmanager.app.core.ads.InterstitialAdManager
 import com.carmanager.app.core.ads.adsEligible
+import com.carmanager.app.core.ads.AdsEntitlementGate
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -50,10 +51,12 @@ class MainActivity : ComponentActivity() {
     lateinit var premiumRepository: PremiumRepository
 
 
+    @Inject lateinit var garage: com.carmanager.app.core.data.local.LocalGarageBootstrap
     @Inject lateinit var session: WorkspaceSession
     @Inject lateinit var deletion: AccountDeletion
     @Inject lateinit var adsInitializer: MobileAdsInitializer
     @Inject lateinit var interstitials: InterstitialAdManager
+    @Inject lateinit var adsEntitlementGate: AdsEntitlementGate
 
     private lateinit var googleMobileAdsConsentManager: GoogleMobileAdsConsentManager
 
@@ -76,6 +79,7 @@ class MainActivity : ComponentActivity() {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
 
+        adsEntitlementGate.configure(intent)
         premiumRepository.initialize()
 
         googleMobileAdsConsentManager = GoogleMobileAdsConsentManager(this)
@@ -86,6 +90,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appearance by startup.appearance.collectAsState()
             val workspaceResolved by session.isResolved.collectAsState()
+            val garageReadiness by session.readiness.collectAsState()
             SideEffect { appearanceComposed = appearance is AppearanceBootstrapState.Ready }
             val currency by settingsRepository.currency.collectAsState(initial = "€")
             val distanceUnit by settingsRepository.distanceUnit.collectAsState(initial = "km")
@@ -93,13 +98,11 @@ class MainActivity : ComponentActivity() {
             val premiumState by premiumRepository.state.collectAsState()
             val consentState by googleMobileAdsConsentManager.state.collectAsState()
             val adsReady by adsInitializer.ready.collectAsState()
-            // Attendre la premiere verification Play ; ne pas recréer une pub a chaque refresh ulterieur.
-            var premiumChecked by remember { mutableStateOf(!premiumState.isLoading) }
-            LaunchedEffect(premiumState.isLoading, consentState.canRequestAds, isPremium) {
-                if (!premiumState.isLoading) premiumChecked = true
-                if (premiumChecked) adsInitializer.initializeIfEligible(consentState.canRequestAds, isPremium)
+            val adsEntitlement = adsEntitlementGate.decision(premiumState)
+            LaunchedEffect(adsEntitlement, consentState.canRequestAds, isPremium) {
+                adsInitializer.initializeIfEligible(adsEligible(consentState.canRequestAds, adsEntitlement), isPremium)
             }
-            val canShowAds = adsReady && premiumChecked && adsEligible(consentState.canRequestAds, isPremium)
+            val canShowAds = adsReady && adsEligible(consentState.canRequestAds, adsEntitlement)
             val owner by session.owner.collectAsState()
             val deletionState by deletion.state.collectAsState()
             SideEffect {
@@ -107,7 +110,16 @@ class MainActivity : ComponentActivity() {
             }
             val readyAppearance = appearance as? AppearanceBootstrapState.Ready
             if (!canComposeLocalApp(appearance, workspaceResolved)) {
-                Box(Modifier.fillMaxSize().background(colorResource(R.color.startup_surface)))
+                CarManagerTheme(darkTheme = readyAppearance?.theme?.usesDarkColors(isSystemInDarkTheme()) ?: false) {
+                    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(colorResource(R.color.startup_surface)),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                        if (garageReadiness == com.carmanager.app.core.domain.session.GarageReadiness.Error) {
+                            Text("Garage local indisponible. Vos données sont conservées.")
+                            TextButton(onClick = { garage.start() }) { Text("Réessayer") }
+                        } else androidx.compose.material3.CircularProgressIndicator()
+                    }
+                }
                 return@setContent
             }
             val workspaceStore = remember(owner) { workspaceStores.forOwner(owner) }
@@ -123,7 +135,7 @@ class MainActivity : ComponentActivity() {
                     LocalWorkspaceOwner provides owner
                 ) { CarManagerApp(
                     activity = this@MainActivity,
-                    onInterstitialOpportunity = { interstitials.onNavigationOpportunity(this@MainActivity) },
+                    interstitials = interstitials,
                     canShowAds = canShowAds && !isPremium,
                     isPrivacyOptionsRequired = consentState.showPrivacyOptions,
                     onPrivacyOptionsClick = {
@@ -134,7 +146,7 @@ class MainActivity : ComponentActivity() {
                     AlertDialog(
                         onDismissRequest = { deletion.acknowledgeResult() },
                         title = { Text(if (deletionState.stage == DeletionStage.COMPLETE) "Compte supprimé" else "Suppression incomplète") },
-                        text = { Text(deletionState.error ?: "Les données de ce compte sur cette installation et ses collections cloud connues ont été supprimées. L'espace invité est actif.") },
+                        text = { Text(deletionState.error ?: "Le compte Firebase et ses anciennes collections cloud connues ont été supprimés. Votre garage local reste sur cet appareil.") },
                         confirmButton = { TextButton(onClick = { deletion.acknowledgeResult() }) { Text("Fermer") } }
                     )
                 }

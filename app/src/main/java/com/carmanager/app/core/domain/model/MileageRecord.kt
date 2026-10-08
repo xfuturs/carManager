@@ -12,5 +12,5 @@ data class MileageRecord(
     val date: Long,
     val mileage: Int,
     val source: MileageSource,
-    val ownerKey: String = "guest:local",
+    val ownerKey: String = com.carmanager.app.core.domain.session.LocalGarageOwner.KEY,
 )

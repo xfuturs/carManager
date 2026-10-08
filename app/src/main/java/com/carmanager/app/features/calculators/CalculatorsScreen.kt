@@ -29,7 +29,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.carmanager.app.R
-import com.carmanager.app.core.ui.components.BannerAdSlot
 import com.carmanager.app.core.ui.components.CarManagerTopLevelAppBar
 import com.carmanager.app.core.ui.theme.CarManagerDimensions
 import com.carmanager.app.core.ui.theme.CarManagerShapes
@@ -40,7 +39,7 @@ import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
-fun CalculatorsScreen(canShowAds: Boolean, viewModel: CalculatorsViewModel = viewModel()) {
+fun CalculatorsScreen(viewModel: CalculatorsViewModel = viewModel()) {
     val units = LocalAppUnits.current
     LaunchedEffect(units.distance, units.currency) { viewModel.preferences(units.distance, units.currency) }
     val distanceLabel = stringResource(R.string.calc_distance, units.distance)
@@ -48,7 +47,6 @@ fun CalculatorsScreen(canShowAds: Boolean, viewModel: CalculatorsViewModel = vie
     val electricityPriceLabel = stringResource(R.string.calc_electric_price, units.currency)
     Scaffold(
         topBar = { CarManagerTopLevelAppBar(title = stringResource(R.string.nav_calculators)) },
-        bottomBar = { if (canShowAds) BannerAdSlot() },
     ) { padding ->
         // Le nouveau formulaire repart en haut ; ses données restent dans le ViewModel.
         key(viewModel.selectedTool) {

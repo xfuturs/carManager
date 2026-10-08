@@ -33,24 +33,24 @@ fun PrivacyPolicyScreen(onNavigateBack: () -> Unit) {
             SecondarySectionTitle("Politique de Confidentialité - Car Manager")
 
             Text(
-                text = "Dernière mise à jour : 30 septembre 2026",
+                text = "Dernière mise à jour : 7 octobre 2026",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             PrivacySection(
                 title = "1. Collecte des données",
-                content = "La connexion utilise Google et Firebase pour votre identité et votre adresse e-mail. Vos véhicules et leurs historiques sont conservés localement dans un espace invité ou dans un espace distinct pour chaque compte."
+                content = "La connexion utilise Google et Firebase pour votre identité et votre adresse e-mail. L’authentification est indépendante du garage local : se connecter, se déconnecter ou changer de compte Google ne change pas les véhicules et leurs historiques sur cette installation."
             )
 
             PrivacySection(
                 title = "2. Utilisation et Stockage",
-                content = "En mode invité comme avec un compte Google, le garage, les historiques et les documents sont gérés localement sur cet appareil. Car Manager ne fournit ni synchronisation cloud du garage ni sauvegarde Google Drive. La sauvegarde ou le transfert du système Android peut toutefois inclure les données locales et documents, selon les réglages et capacités de l'appareil ; leur restauration complète n'est pas garantie. Aucun transfert automatique entre espaces ni restauration cloud applicative ne sont disponibles. Google/Firebase, Google Play Billing et les services publicitaires utilisent des connexions réseau."
+                content = "En mode invité comme avec un compte Google, le garage, les historiques et les documents sont gérés localement sur cet appareil. Car Manager ne fournit ni synchronisation cloud du garage ni sauvegarde Google Drive. La sauvegarde ou le transfert du système Android peut toutefois inclure les données locales et documents, selon les réglages et capacités de l'appareil ; leur restauration complète n'est pas garantie. Aucune restauration cloud applicative n’est disponible. Google/Firebase, Google Play Billing et les services publicitaires utilisent des connexions réseau."
             )
 
             PrivacySection(
                 title = "3. Partage des données",
-                content = "Le garage et les documents sont conservés dans le stockage privé de l'application, avec un espace invité et un espace distinct par compte sur cette installation. Les services Google/Firebase, Google Play Billing et Google AdMob/UMP traitent les données nécessaires à leurs fonctions. Un document ou rapport peut être transmis au destinataire que vous choisissez lors d'un partage."
+                content = "Le garage et les documents sont conservés dans le stockage privé de l'application, dans un seul garage local sur cette installation. Les différentes identités Google utilisées sur cette même installation accèdent au même garage. Les services Google/Firebase, Google Play Billing et Google AdMob/UMP traitent les données nécessaires à leurs fonctions. Un document ou rapport peut être transmis au destinataire que vous choisissez lors d'un partage."
             )
 
             PrivacySection(
@@ -60,7 +60,7 @@ fun PrivacyPolicyScreen(onNavigateBack: () -> Unit) {
 
             PrivacySection(
                 title = "5. Vos droits (Droit à l'oubli)",
-                content = "La suppression depuis les paramètres vise les anciennes données envoyées dans les collections Firestore connues du compte, ses données et documents sur cette installation, ses rappels identifiables, puis son compte Firebase. Une erreur est signalée et peut laisser une suppression partielle. Les données invitées et celles des autres comptes restent conservées. Les exports partagés et les données conservées sur d'autres appareils ne sont pas effacés par cette action."
+                content = "La suppression du compte depuis les paramètres vise les anciennes collections Firestore connues et le compte Firebase. Elle ne supprime pas automatiquement les véhicules, historiques, documents, rapports ou rappels du garage local. Vous pouvez toujours supprimer individuellement vos véhicules et documents dans l’application. Une erreur est signalée et peut laisser une suppression partielle du compte. Les exports partagés et les données conservées sur d'autres appareils ne sont pas effacés par cette action."
             )
 
         }

@@ -19,5 +19,5 @@ data class Document(
     val category: DocumentCategory,
     val filePath: String,
     val date: Long,
-    val ownerKey: String = "guest:local",
+    val ownerKey: String = com.carmanager.app.core.domain.session.LocalGarageOwner.KEY,
 )

@@ -30,7 +30,7 @@ class GetDashboardStatsUseCaseTest {
         fuelRepository,
         maintenanceRepository,
         documentRepository,
-        WorkspaceSession(TestDeletionRegistry())
+        WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
     )
 
     @Test
@@ -51,7 +51,7 @@ class GetDashboardStatsUseCaseTest {
 
         // WHEN
         val stats = GetDashboardStatsUseCase(vehicleRepository, fuelRepository, maintenanceRepository, documentRepository,
-            WorkspaceSession(TestDeletionRegistry()), DashboardTimeSource(), kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))().first()
+            WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }, DashboardTimeSource(), kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))().first()
 
         // THEN
         val vehicleStats = stats.vehicles.first()

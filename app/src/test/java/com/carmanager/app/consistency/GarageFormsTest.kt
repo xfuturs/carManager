@@ -27,7 +27,7 @@ class GarageFormsTest {
     private val dispatcher = StandardTestDispatcher()
     private val context = mockk<Context>()
     private val vehicles = mockk<VehicleRepository>()
-    private val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid("A") }
+    private val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
     private val vehicle = GarageFixture().vehicle().copy(tankCapacity = 100.0, batteryCapacity = 50.0)
 
     @BeforeEach fun setup() {
@@ -53,7 +53,7 @@ class GarageFormsTest {
         vm.onLitersChange("99")
         gate.complete(Unit); runCurrent()
         assertEquals(12.5, saved.captured.liters); assertEquals(25.5, saved.captured.totalPrice)
-        assertEquals("firebase:A", saved.captured.ownerKey)
+        assertEquals("local:device", saved.captured.ownerKey)
         assertEquals(UiEvent.Success, vm.uiEvent.first())
         assertFalse(vm.isSaving); assertTrue(vm.hasSaved)
         vm.save(); runCurrent()
@@ -141,6 +141,6 @@ class GarageFormsTest {
         assertEquals(UiEvent.Success, vm.uiEvent.first()); assertTrue(vm.hasSaved); assertFalse(vm.isSaving)
         vm.save(); runCurrent()
         coVerify(exactly = 1) { repository.saveMaintenanceRecord(any()) }
-        verify(exactly = 1) { NotificationHelper.scheduleReminder(any(), any(), any(), any(), "firebase:A", 8L) }
+        verify(exactly = 1) { NotificationHelper.scheduleReminder(any(), any(), any(), any(), "local:device", 8L) }
     }
 }

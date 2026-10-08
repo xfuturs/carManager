@@ -82,11 +82,14 @@ class DashboardViewModel @Inject constructor(
     var isPreparingReport by mutableStateOf(false)
         private set
     fun prepareReport(vehicleId: Long) {
+        if (PdfAccessPolicy.resolve(isPremium.value) != PdfAccess.PREMIUM) return
         if (isPreparingReport || isGeneratingReport || _reportDraft.value != null) return
         isPreparingReport = true
         viewModelScope.launch {
             try {
+                if (PdfAccessPolicy.resolve(isPremium.value) != PdfAccess.PREMIUM) return@launch
                 val previous = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { storeVehicleReportUseCase.previousReports(vehicleId) }
+                if (PdfAccessPolicy.resolve(isPremium.value) != PdfAccess.PREMIUM) return@launch
                 _reportDraft.value = ReportDraft(vehicleId, previous)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -97,6 +100,7 @@ class DashboardViewModel @Inject constructor(
     fun cancelReportDraft() { _reportDraft.value = null }
     fun toggleReportSection(section: ReportSection) { _reportDraft.value = _reportDraft.value?.toggle(section) }
     fun confirmReportDraft() {
+        if (PdfAccessPolicy.resolve(isPremium.value) != PdfAccess.PREMIUM) { cancelReportDraft(); return }
         val draft = _reportDraft.value?.takeIf { it.canGenerate } ?: return
         _reportDraft.value = null
         generateReport(draft.vehicleId, draft.selected)
@@ -118,12 +122,16 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun generateReport(vehicleId: Long, sections: Set<ReportSection> = ReportSection.entries.toSet()) {
+        if (PdfAccessPolicy.resolve(isPremium.value) != PdfAccess.PREMIUM) return
         if (sections.isEmpty()) return
         if (isGeneratingReport) return
         isGeneratingReport = true
         viewModelScope.launch {
             try {
-                _generatedReport.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { storeVehicleReportUseCase(vehicleId, sections) }
+                _generatedReport.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    if (PdfAccessPolicy.resolve(isPremium.value) != PdfAccess.PREMIUM) return@withContext null
+                    storeVehicleReportUseCase(vehicleId, sections)
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 Log.e("PdfReportHelper", "Erreur lors de la génération du PDF", error)

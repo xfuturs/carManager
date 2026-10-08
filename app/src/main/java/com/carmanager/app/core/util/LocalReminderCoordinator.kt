@@ -35,6 +35,7 @@ class LocalReminderCoordinator @Inject constructor(private val settings: Reminde
     private fun snapshots(): Flow<Snapshot> {
         val gate = combine(session.owner, session.isResolved, registry.blockedOwners) { owner, ready, blocked -> Gate(owner, ready, owner in blocked) }
         return combine(gate, settings.preferences, maintenance.observeAll(), vehicles.observeAll()) { g, p, m, v -> Snapshot(g, p, m, v) }
+            .filter { it.gate.ready }
     }
     @Synchronized fun start() {
         if (observer?.isActive == true) return

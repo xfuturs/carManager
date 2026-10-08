@@ -18,19 +18,19 @@ import org.junit.jupiter.api.Test
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class PdfAccessPolicyTest {
     @Test fun `release FREE remains locked`() {
-        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(false, false))
+        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(false))
     }
 
     @Test fun `release Premium retains normal PDF access`() {
-        assertEquals(PdfAccess.PREMIUM, PdfAccessPolicy.resolve(false, true))
+        assertEquals(PdfAccess.PREMIUM, PdfAccessPolicy.resolve(true))
     }
 
-    @Test fun `debug FREE gets only the explicit PDF test action`() {
-        assertEquals(PdfAccess.DEBUG_TEST, PdfAccessPolicy.resolve(true, false))
+    @Test fun `FREE has no PDF test access`() {
+        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(false))
     }
 
-    @Test fun `debug Premium retains normal access without a duplicate test action`() {
-        assertEquals(PdfAccess.PREMIUM, PdfAccessPolicy.resolve(true, true))
+    @Test fun `Premium has normal PDF access only`() {
+        assertEquals(PdfAccess.PREMIUM, PdfAccessPolicy.resolve(true))
     }
 
     @Test fun `PDF access evaluation never mutates FREE repository or calls Billing`() = runTest {
@@ -39,7 +39,7 @@ class PdfAccessPolicyTest {
         premium.initialize(); runCurrent()
         val original = premium.state.value
         val calls = listOf(gateway.queryCalls, gateway.offerCalls, gateway.launchCalls, gateway.ackTokens.size)
-        repeat(5) { assertEquals(PdfAccess.DEBUG_TEST, PdfAccessPolicy.resolve(true, premium.isPremium.value)) }
+        repeat(5) { assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(premium.isPremium.value)) }
         runCurrent()
         assertSame(original, premium.state.value)
         assertEquals(PremiumEntitlement.FREE, premium.state.value.entitlement)
@@ -47,48 +47,48 @@ class PdfAccessPolicyTest {
         assertEquals(calls, listOf(gateway.queryCalls, gateway.offerCalls, gateway.launchCalls, gateway.ackTokens.size))
     }
 
-    @Test fun `pending purchase remains non Premium while the debug PDF action is available`() = runTest {
+    @Test fun `pending purchase remains non Premium and PDF generation stays locked`() = runTest {
         val gateway = FakePlayBillingGateway().apply {
             purchaseReply = BillingReply(BillingOutcome.OK, listOf(premiumPurchase(PlayPurchaseState.PENDING, false)))
         }
         val premium = PremiumRepositoryImpl(gateway, backgroundScope)
         premium.initialize(); runCurrent()
-        assertEquals(PdfAccess.DEBUG_TEST, PdfAccessPolicy.resolve(true, premium.isPremium.value))
+        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(premium.isPremium.value))
         assertEquals(PremiumEntitlement.PENDING, premium.state.value.entitlement)
         assertFalse(premium.isPremium.value)
         assertTrue(gateway.ackTokens.isEmpty())
     }
 
-    @Test fun `debug PDF access leaves FREE Ads eligibility and UMP requirement intact`() {
+    @Test fun `denied PDF access leaves FREE Ads eligibility and UMP requirement intact`() {
         val realPremium = false
-        assertEquals(PdfAccess.DEBUG_TEST, PdfAccessPolicy.resolve(true, realPremium))
+        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(realPremium))
         assertTrue(adsEligible(canRequestAds = true, isPremium = realPremium))
         assertFalse(adsEligible(canRequestAds = false, isPremium = realPremium))
     }
 
-    @Test fun `Stats PDF route and same destination remain excluded from interstitial triggers`() {
-        assertFalse(InterstitialNavigationPolicy.isEligible(Screen.Dashboard.route, Screen.Stats.route))
-        assertFalse(InterstitialNavigationPolicy.isEligible(Screen.Stats.route, Screen.Stats.route))
-        assertFalse(InterstitialNavigationPolicy.isEligible(Screen.Stats.route, Screen.Dashboard.route))
+    @Test fun `Stats PDF remains unsafe and returning to dashboard permits deferred cadence`() {
+        assertFalse(InterstitialNavigationPolicy.isSafeRoute(Screen.Stats.route))
+        assertFalse(InterstitialNavigationPolicy.isSafeRoute(Screen.Documents.route))
+        assertTrue(InterstitialNavigationPolicy.isSafeRoute(Screen.Dashboard.route))
     }
 
-    @Test fun `policy accepts only build and real entitlement booleans without identity or persisted state`() {
+    @Test fun `policy accepts only real entitlement without build identity or persisted state`() {
         val methods = PdfAccessPolicy::class.java.declaredMethods.filter { !it.isSynthetic }
         assertEquals(1, methods.size)
-        assertEquals(listOf(Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType), methods.single().parameterTypes.toList())
+        assertEquals(listOf(Boolean::class.javaPrimitiveType), methods.single().parameterTypes.toList())
         val fields = PdfAccessPolicy::class.java.declaredFields
         assertTrue(fields.all { java.lang.reflect.Modifier.isStatic(it.modifiers) && java.lang.reflect.Modifier.isFinal(it.modifiers) })
         assertTrue(fields.all { it.name == "INSTANCE" || (it.name == "\$stable" && it.type == Int::class.javaPrimitiveType) })
     }
 
-    @Test fun `fresh repository after restart stays FREE and release does not inherit debug PDF access`() = runTest {
+    @Test fun `fresh repository after restart stays FREE without inheriting PDF generation access`() = runTest {
         val first = PremiumRepositoryImpl(FakePlayBillingGateway(), backgroundScope)
         first.initialize(); runCurrent()
-        assertEquals(PdfAccess.DEBUG_TEST, PdfAccessPolicy.resolve(true, first.isPremium.value))
+        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(first.isPremium.value))
         val restarted = PremiumRepositoryImpl(FakePlayBillingGateway(), backgroundScope)
         restarted.initialize(); runCurrent()
         assertFalse(restarted.isPremium.value)
-        assertEquals(PdfAccess.DEBUG_TEST, PdfAccessPolicy.resolve(true, restarted.isPremium.value))
-        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(false, restarted.isPremium.value))
+        assertEquals(PdfAccess.LOCKED, PdfAccessPolicy.resolve(restarted.isPremium.value))
+        assertEquals(PremiumEntitlement.FREE, restarted.state.value.entitlement)
     }
 }

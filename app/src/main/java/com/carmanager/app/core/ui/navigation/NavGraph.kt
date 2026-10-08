@@ -4,10 +4,20 @@ import com.carmanager.app.core.ui.components.CarManagerBottomNavigation
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import com.carmanager.app.core.ads.InterstitialAdManager
+import com.carmanager.app.core.ads.InterstitialModalState
+import com.carmanager.app.core.ads.BannerHostRetention
+import com.carmanager.app.core.ui.components.BannerAdSlot
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -37,7 +47,7 @@ import com.carmanager.app.R
 @Composable
 fun CarManagerNavHost(
     activity: ComponentActivity,
-    onInterstitialOpportunity: () -> Unit,
+    interstitials: InterstitialAdManager,
     canShowAds: Boolean,
     isPrivacyOptionsRequired: Boolean,
     onPrivacyOptionsClick: () -> Unit
@@ -46,21 +56,37 @@ fun CarManagerNavHost(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val selectedDestination = topLevelDestinationForRoute(currentDestination?.route)
-    ObserveInterstitialOpportunities(navController, activity, onInterstitialOpportunity)
+    val bannerVisible = canShowBannerOnRoute(currentDestination?.route, canShowAds)
+    val bannerOwner = remember { BannerHostRetention() }
+    val bannerRetained by bannerOwner.retained.collectAsState()
+    SideEffect { bannerOwner.update(canShowAds, bannerVisible) }
+    val interstitialModals = remember { InterstitialModalState() }
+    ObserveTimedInterstitials(navController, activity, interstitials, interstitialModals)
 
+    CompositionLocalProvider(LocalInterstitialModals provides interstitialModals) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (selectedDestination != null) {
-                CarManagerBottomNavigation(
-                    selectedDestination = selectedDestination,
-                    onDestinationClick = { destination ->
-                        navController.navigate(
-                            destination.route,
-                            topLevelNavigationOptions(navController.graph.findStartDestination().id)
-                        )
-                    }
-                )
+            Column {
+                // Position stable, hors NavHost : aucune clé de route et un seul parent AndroidView.
+                if (canShowAds && (bannerVisible || bannerRetained)) {
+                    BannerAdSlot(visible = bannerVisible)
+                }
+                if (selectedDestination != null) {
+                    CarManagerBottomNavigation(
+                        selectedDestination = selectedDestination,
+                        onDestinationClick = { destination ->
+                            navController.navigate(
+                                destination.route,
+                                topLevelNavigationOptions(navController.graph.findStartDestination().id)
+                            )
+                        }
+                    )
+                }
+                // La barre principale gère déjà ses insets ; Véhicules reste une destination secondaire.
+                if (selectedDestination == null && bannerVisible) {
+                    androidx.compose.foundation.layout.Spacer(Modifier.navigationBarsPadding())
+                }
             }
         },
     ) { innerPadding ->
@@ -71,7 +97,6 @@ fun CarManagerNavHost(
         ) {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
-                    canShowAds = canShowBannerOnRoute(Screen.Dashboard.route, canShowAds),
                     onAddVehicle = { navController.navigate(Screen.VehicleEdit.createRoute()) },
                     onEditVehicle = { id -> navController.navigate(Screen.VehicleEdit.createRoute(id)) },
                     onNavigateToFuel = { id -> navController.navigate(Screen.FuelList.createRoute(id)) },
@@ -91,7 +116,6 @@ fun CarManagerNavHost(
             }
             composable(Screen.Vehicles.route) {
                 VehiclesScreen(
-                    canShowAds = canShowBannerOnRoute(Screen.Vehicles.route, canShowAds),
                     onNavigateBack = { navController.popBackStack() },
                     onAddVehicle = { navController.navigate(Screen.VehicleEdit.createRoute()) },
                     onEditVehicle = { id -> navController.navigate(Screen.VehicleEdit.createRoute(id)) },
@@ -100,7 +124,7 @@ fun CarManagerNavHost(
                 )
             }
             composable(Screen.Calculators.route) {
-                CalculatorsScreen(canShowAds = canShowBannerOnRoute(Screen.Calculators.route, canShowAds))
+                CalculatorsScreen()
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(
@@ -216,5 +240,6 @@ fun CarManagerNavHost(
                 )
             }
         }
+    }
     }
 }

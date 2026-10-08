@@ -16,7 +16,7 @@ import org.junit.jupiter.api.io.TempDir
 
 class ReportPresentationSnapshotTest {
     @TempDir lateinit var directory: File
-    private val session=WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid(null) }
+    private val session=WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
     private val documents=mockk<DocumentRepository>()
     private var settings=ReportPresentationSettings()
     private var captures=0
@@ -67,8 +67,8 @@ class ReportPresentationSnapshotTest {
         assertNull(rendered); assertTrue(directory.listFiles()!!.isEmpty())
         coVerify(exactly=0) { documents.saveDocument(any()) }
     }
-    @Test fun `owner switch during settings capture rejects before rendering`()=runTest {
-        capture={session.setAuthenticatedUid("A"); settings}
+    @Test fun `garage unavailability during settings capture rejects before rendering`()=runTest {
+        capture={session.beginBootstrap(); settings}
         try { useCase()(1); fail<Unit>("owner guard") } catch (_: IllegalStateException) {}
         assertNull(rendered); assertTrue(directory.listFiles()!!.isEmpty())
         coVerify(exactly=0) { documents.saveDocument(any()) }
@@ -77,7 +77,7 @@ class ReportPresentationSnapshotTest {
         val sections=setOf(ReportSection.FUEL_AND_CHARGING_HISTORY,ReportSection.MAINTENANCE_HISTORY)
         useCase()(1,sections); assertEquals(sections,rendered!!.sections)
         assertEquals(42.5,rendered!!.maintenanceRecords.single().cost)
-        assertEquals("guest:local",rendered!!.vehicle.ownerKey)
+        assertEquals("local:device",rendered!!.vehicle.ownerKey)
         assertEquals(listOf(0,1000),rendered!!.fuelRecords.map { it.mileage })
     }
 }

@@ -29,5 +29,5 @@ data class Vehicle(
     val batteryCapacity: Double? = null,
     val createdAt: Long,
     val updatedAt: Long,
-    val ownerKey: String = "guest:local",
+    val ownerKey: String = com.carmanager.app.core.domain.session.LocalGarageOwner.KEY,
 )

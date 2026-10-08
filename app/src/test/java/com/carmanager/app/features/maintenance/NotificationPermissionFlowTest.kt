@@ -65,7 +65,7 @@ class NotificationPermissionFlowTest {
 
     private fun assertOneWriteAndReminder() {
         coVerify(exactly = 1) { repository.saveMaintenanceRecord(any()) }
-        verify(exactly = 1) { NotificationHelper.scheduleReminder(any(), future, any(), any(), "firebase:A", 8L) }
+        verify(exactly = 1) { NotificationHelper.scheduleReminder(any(), future, any(), any(), "local:device", 8L) }
     }
 
     @Test fun `permission policy gates API 26 to 32 and recognizes API 33 plus state`() {
@@ -103,7 +103,7 @@ class NotificationPermissionFlowTest {
             assertEquals(listOf(UiEvent.Success), events)
         }
         coVerify(exactly = 2) { repository.saveMaintenanceRecord(any()) }
-        verify(exactly = 2) { NotificationHelper.scheduleReminder(any(), future, any(), any(), "firebase:A", 8L) }
+        verify(exactly = 2) { NotificationHelper.scheduleReminder(any(), future, any(), any(), "local:device", 8L) }
     }
 
     @Test fun `already granted future reminder completes normally`() = runTest(dispatcher) {
@@ -156,7 +156,7 @@ class NotificationPermissionFlowTest {
         assertEquals(1500, garage.vehicle().currentMileage)
         assertEquals(1, garage.transactions)
         assertTrue(vm.hasSaved)
-        verify(exactly = 1) { NotificationHelper.scheduleReminder(any(), future, "Rappel : Contrôle Technique", any(), "firebase:A", 1L) }
+        verify(exactly = 1) { NotificationHelper.scheduleReminder(any(), future, "Rappel : Contrôle Technique", any(), "local:device", 1L) }
     }
 
     @Test fun `delayed UI collection and grant emit one success without resaving or scheduling again`() = runTest(dispatcher) {

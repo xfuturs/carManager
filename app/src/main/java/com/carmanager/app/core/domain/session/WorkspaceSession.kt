@@ -15,19 +15,25 @@ interface DeletionRegistry {
     suspend fun block(owner: String)
 }
 
-/** Alimenté exclusivement par le listener Firebase d'AuthRepositoryImpl. */
+enum class GarageReadiness { Loading, Ready, Error }
+
+/** Session du garage uniquement ; la résolution dépend de la consolidation locale, jamais d'Auth. */
 @Singleton
 class WorkspaceSession @Inject constructor(private val deletionRegistry: DeletionRegistry) {
-    private val _owner = MutableStateFlow(WorkspaceOwner.GUEST)
+    private val _owner = MutableStateFlow(LocalGarageOwner.KEY)
     val owner: StateFlow<String> = _owner.asStateFlow()
     private val _isResolved = MutableStateFlow(false)
     val isResolved: StateFlow<Boolean> = _isResolved.asStateFlow()
-    fun setAuthenticatedUid(uid: String?) {
-        _owner.value = WorkspaceOwner.fromUid(uid)
+    private val _readiness = MutableStateFlow(GarageReadiness.Loading)
+    val readiness = _readiness.asStateFlow()
+    internal fun beginBootstrap() { _isResolved.value = false; _readiness.value = GarageReadiness.Loading }
+    internal fun completeBootstrap() {
+        _readiness.value = GarageReadiness.Ready
         _isResolved.value = true
     }
+    internal fun failBootstrap() { _isResolved.value = false; _readiness.value = GarageReadiness.Error }
     fun requireCurrent(expected: String) {
-        check(owner.value == expected) { "L'espace actif a changé. Rouvrez cet écran." }
+        check(expected == LocalGarageOwner.KEY && isResolved.value) { "Le garage local est indisponible. Rouvrez cet écran." }
     }
     fun requireWritable(expected: String) {
         requireCurrent(expected)
@@ -37,7 +43,7 @@ class WorkspaceSession @Inject constructor(private val deletionRegistry: Deletio
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    fun <T> observe(query: (String) -> Flow<T>): Flow<T> = owner.flatMapLatest { key ->
-        query(key).filter { owner.value == key }
+    fun <T> observe(query: (String) -> Flow<T>): Flow<T> = isResolved.flatMapLatest { ready ->
+        if (ready) query(LocalGarageOwner.KEY).filter { isResolved.value } else emptyFlow()
     }
 }

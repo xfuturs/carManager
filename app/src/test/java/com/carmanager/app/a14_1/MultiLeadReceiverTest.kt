@@ -27,11 +27,11 @@ class MultiLeadReceiverTest {
             val garage=GarageFixture(); val settings=ReminderSettingsStore(store)
             settings.update { it.copy(enabled=mode!="disabled",leadDaysSet=if(mode=="removed") setOf(0) else setOf(0,7)) }
             val due=System.currentTimeMillis()+30*86400_000L
-            coEvery { garage.maintenanceDao.getById(9,"firebase:A") } returns
+            coEvery { garage.maintenanceDao.getById(9,"local:device") } returns
                 if(mode=="deleted") null else garage.maintenance().copy(id=9,nextDueDate=due).toEntity()
-            if(mode=="owner") garage.session.setAuthenticatedUid("B")
+            val deliveredOwner=if(mode=="owner") "firebase:legacy" else "local:device"
             val intent=mockk<Intent>(); val uri=mockk<Uri>(); val context=mockk<Context>(); val manager=mockk<NotificationManager>()
-            every { intent.getStringExtra("ownerKey") } returns "firebase:A"
+            every { intent.getStringExtra("ownerKey") } returns deliveredOwner
             every { intent.getLongExtra("recordId",0) } returns 9
             every { intent.getIntExtra("leadDays",any()) } returns 7
             every { intent.hasExtra("dueAt") } returns true
@@ -39,7 +39,7 @@ class MultiLeadReceiverTest {
             every { intent.getLongExtra("dueAt",0) } returns due
             every { intent.data } returns uri; every { uri.scheme } returns "carmanager"
             every { uri.authority } returns "maintenance"; every { uri.lastPathSegment } returns "9"
-            every { uri.getQueryParameter("owner") } returns "firebase:A"
+            every { uri.getQueryParameter("owner") } returns deliveredOwner
             every { uri.getQueryParameter("leadDays") } returns if(mode=="legacy") null else "7"
             every { context.getSystemService(Context.NOTIFICATION_SERVICE) } returns manager
             every { manager.areNotificationsEnabled() } returns false

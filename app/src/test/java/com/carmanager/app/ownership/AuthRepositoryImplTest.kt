@@ -21,7 +21,8 @@ class AuthRepositoryImplTest {
     private val auth = mockk<FirebaseAuth>()
     private val listener = slot<FirebaseAuth.AuthStateListener>()
     private var activeUser: FirebaseUser? = null
-    private val session = WorkspaceSession(TestDeletionRegistry())
+    private val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
+    private val identity = AuthSession()
     private val deletion = mockk<AccountDeletion>()
 
     @BeforeEach fun setup() {
@@ -48,7 +49,8 @@ class AuthRepositoryImplTest {
         every { this@mockk.uid } returns uid
         every { this@mockk.email } returns email
     }
-    private fun repository() = AuthRepositoryImpl(session, DisabledSyncRepository(), deletion, mockk<Context>())
+    private fun repository(sync: com.carmanager.app.core.domain.repository.SyncRepository = DisabledSyncRepository()) =
+        AuthRepositoryImpl(identity, sync, deletion, mockk<Context>())
     private fun nextGoogleUser(uid: String, email: String) {
         every { auth.signInWithCredential(any()) } answers {
             activeUser = user(uid, email)
@@ -57,27 +59,27 @@ class AuthRepositoryImplTest {
         }
     }
 
-    @Test fun `Google non Gmail A B guest transitions preserve local rows and same UID access`() = runTest {
-        val rows = listOf(testVehicle("guest:local", 1), testVehicle("firebase:A", 2), testVehicle("firebase:B", 3))
+    @Test fun `Google non Gmail A B guest transitions preserve canonical rows and separate auth UID`() = runTest {
+        val rows = listOf(testVehicle("local:device", 1), testVehicle("local:device", 2), testVehicle("local:device", 3))
         val dao = mockk<VehicleDao>()
         every { dao.observeAll(any()) } answers { flowOf(rows.filter { it.ownerKey == firstArg<String>() }) }
         val vehicles = VehicleRepositoryImpl(dao, session, mockk<OwnedDatabaseAccess>(), mockk())
         val repository = repository()
-        assertEquals("guest:local", session.owner.value)
-        assertEquals(1L, vehicles.observeAll().first().single().id)
-        for ((uid, id) in listOf("A" to 2L, "B" to 3L, "A" to 2L)) {
+        assertEquals("local:device", session.owner.value)
+        assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
+        for (uid in listOf("A", "B", "A")) {
             nextGoogleUser(uid, "driver@company.example")
             assertTrue(repository.signInWithGoogle("google-token").isSuccess)
-            assertEquals("firebase:$uid", session.owner.value)
+            assertEquals("local:device", session.owner.value)
             assertEquals(uid, repository.currentUser.value?.id)
             assertEquals("driver@company.example", repository.currentUser.value?.email)
-            assertEquals(id, vehicles.observeAll().first().single().id)
+            assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
             repository.signOut()
             assertNull(repository.currentUser.value)
-            assertEquals(1L, vehicles.observeAll().first().single().id)
+            assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
         }
         coVerify(exactly = 0) { deletion.delete(any()) }
-        verify { dao.observeAll("guest:local"); dao.observeAll("firebase:A"); dao.observeAll("firebase:B") }
+        verify { dao.observeAll("local:device") }
         confirmVerified(dao)
     }
 
@@ -85,18 +87,18 @@ class AuthRepositoryImplTest {
         activeUser = user("legacy", "legacy@company.example")
         val passwordProvider = mockk<UserInfo> { every { providerId } returns "password" }
         every { activeUser!!.providerData } returns listOf(passwordProvider)
-        val rows = listOf(testVehicle("guest:local", 1), testVehicle("firebase:legacy", 2))
+        val rows = listOf(testVehicle("local:device", 1), testVehicle("local:device", 2))
         val dao = mockk<VehicleDao>()
         every { dao.observeAll(any()) } answers { flowOf(rows.filter { it.ownerKey == firstArg<String>() }) }
         val vehicles = VehicleRepositoryImpl(dao, session, mockk<OwnedDatabaseAccess>(), mockk())
         val repository = repository()
-        assertEquals("firebase:legacy", session.owner.value)
+        assertEquals("local:device", session.owner.value)
         assertEquals("legacy", repository.currentUser.value?.id)
-        assertEquals(2L, vehicles.observeAll().first().single().id)
+        assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
         repository.signOut()
-        assertEquals("guest:local", session.owner.value)
-        assertEquals(1L, vehicles.observeAll().first().single().id)
-        verify { dao.observeAll("firebase:legacy"); dao.observeAll("guest:local") }
+        assertEquals("local:device", session.owner.value)
+        assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
+        verify { dao.observeAll("local:device") }
         confirmVerified(dao)
         coVerify(exactly = 0) { deletion.delete(any()) }
         verify(exactly = 0) { auth.signInWithCredential(any()) }
@@ -119,5 +121,39 @@ class AuthRepositoryImplTest {
             assertFalse(names.any { it == "signIn" || it == "signUp" })
             assertTrue("signInWithGoogle" in names)
         }
+    }
+
+    @Test fun `failed Google login preserves the ready local garage and guest identity`() = runTest {
+        val rows = listOf(testVehicle("local:device", 1), testVehicle("local:device", 2))
+        val dao = mockk<VehicleDao>()
+        every { dao.observeAll("local:device") } returns flowOf(rows)
+        val vehicles = VehicleRepositoryImpl(dao, session, mockk<OwnedDatabaseAccess>(), mockk())
+        val repository = repository()
+        val failure = IllegalStateException("Google indisponible")
+        every { auth.signInWithCredential(any()) } returns Tasks.forException(failure)
+        assertEquals(failure, repository.signInWithGoogle("google-token").exceptionOrNull())
+        assertNull(repository.currentUser.value); assertNull(identity.uid.value)
+        assertEquals(GarageReadiness.Ready, session.readiness.value)
+        assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
+        coVerify(exactly = 0) { deletion.delete(any()) }
+    }
+
+    @Test fun `failed logout preserves Google identity and the ready local garage`() = runTest {
+        activeUser = user("A", "driver@company.example")
+        val rows = listOf(testVehicle("local:device", 1), testVehicle("local:device", 2))
+        val dao = mockk<VehicleDao>()
+        every { dao.observeAll("local:device") } returns flowOf(rows)
+        val vehicles = VehicleRepositoryImpl(dao, session, mockk<OwnedDatabaseAccess>(), mockk())
+        val sync = mockk<com.carmanager.app.core.domain.repository.SyncRepository>()
+        val failure = IllegalStateException("Arrêt indisponible")
+        coEvery { sync.stopSync() } throws failure
+        val repository = repository(sync)
+        val actual = runCatching { repository.signOut() }.exceptionOrNull()
+        assertEquals(failure.javaClass, actual?.javaClass); assertEquals(failure.message, actual?.message)
+        assertEquals("A", repository.currentUser.value?.id); assertEquals("A", identity.uid.value)
+        assertEquals(GarageReadiness.Ready, session.readiness.value)
+        assertEquals(rows.map { it.id }, vehicles.observeAll().first().map { it.id })
+        verify(exactly = 0) { auth.signOut() }
+        coVerify(exactly = 0) { deletion.delete(any()) }
     }
 }

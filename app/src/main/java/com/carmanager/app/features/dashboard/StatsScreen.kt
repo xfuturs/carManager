@@ -25,7 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.carmanager.app.BuildConfig
 import com.carmanager.app.core.domain.model.FuelType
 import com.carmanager.app.core.ui.components.*
 import com.carmanager.app.core.ui.theme.CarManagerShapes
@@ -52,7 +51,7 @@ fun StatsScreen(onNavigateBack: () -> Unit, viewModel: DashboardViewModel = hilt
     val generatedReport by viewModel.generatedReport.collectAsStateWithLifecycle()
     val draft by viewModel.reportDraft.collectAsStateWithLifecycle()
     draft?.let { ReportConfigurationDialog(it, viewModel::toggleReportSection, viewModel::cancelReportDraft, {
-        if (isPremium || BuildConfig.DEBUG) viewModel.confirmReportDraft()
+        if (PdfAccessPolicy.resolve(isPremium) == PdfAccess.PREMIUM) viewModel.confirmReportDraft()
         else viewModel.cancelReportDraft()
     }) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -124,7 +123,7 @@ fun VehicleStatsSummary(stats: com.carmanager.app.core.domain.model.VehicleStats
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        if (isPremium) {
+        if (PdfAccessPolicy.resolve(isPremium) == PdfAccess.PREMIUM) {
             OutlinedButton(onClick = onGenerateReport, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = CarManagerShapes.control) {
                 Icon(Icons.Default.PictureAsPdf, null, Modifier.size(20.dp))
@@ -139,10 +138,6 @@ fun VehicleStatsSummary(stats: com.carmanager.app.core.domain.model.VehicleStats
                         Text("Rapport de revente PDF · Premium", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Text("Fonction verrouillée. Activez Premium dans Paramètres pour générer et partager ce rapport.",
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        // La garde constante retire cette action du code compilé en release.
-                        if (BuildConfig.DEBUG && PdfAccessPolicy.resolve(BuildConfig.DEBUG, isPremium) == PdfAccess.DEBUG_TEST) {
-                            DebugPdfTestAction(onGenerateReport)
-                        }
                     }
                 }
             }

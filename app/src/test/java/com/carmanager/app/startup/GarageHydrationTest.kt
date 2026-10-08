@@ -38,14 +38,14 @@ class GarageHydrationTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             observeLocalState(session, MutableStateFlow(0)) { snapshots }.toList(states)
         }
-        session.setAuthenticatedUid(null); runCurrent()
+        session.completeBootstrap(); runCurrent()
         assertEquals(listOf(LocalDataState.Loading), states)
         snapshots.emit(listOf("vehicle")); runCurrent()
-        assertEquals(listOf(LocalDataState.Loading, LocalDataState.Ready(WorkspaceOwner.GUEST, listOf("vehicle"))), states)
+        assertEquals(listOf(LocalDataState.Loading, LocalDataState.Ready(com.carmanager.app.core.domain.session.LocalGarageOwner.KEY, listOf("vehicle"))), states)
     }
 
     @Test fun `real empty snapshot becomes Ready empty only after Room emits`() = runTest {
-        val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid(null) }
+        val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
         val snapshots = MutableSharedFlow<List<String>>()
         val states = mutableListOf<LocalDataState<List<String>>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -53,41 +53,36 @@ class GarageHydrationTest {
         }
         runCurrent(); assertEquals(LocalDataState.Loading, states.last())
         snapshots.emit(emptyList()); runCurrent()
-        assertEquals(LocalDataState.Ready(WorkspaceOwner.GUEST, emptyList<String>()), states.last())
+        assertEquals(LocalDataState.Ready(com.carmanager.app.core.domain.session.LocalGarageOwner.KEY, emptyList<String>()), states.last())
     }
 
-    @Test fun `guest A B and logout discard old snapshots before the new owner's first data`() = runTest {
-        val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid(null) }
-        val sources = listOf(WorkspaceOwner.GUEST, "firebase:A", "firebase:B").associateWith { MutableSharedFlow<List<String>>() }
+    @Test fun `guest A B and logout keep the same Ready without querying legacy owners`() = runTest {
+        val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
+        val identity = AuthSession()
+        var queries = 0
         val states = mutableListOf<LocalDataState<List<String>>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            observeLocalState(session, MutableStateFlow(0)) { sources.getValue(it) }.toList(states)
+            observeLocalState(session, MutableStateFlow(0)) { owner ->
+                assertEquals("local:device", owner); queries++; flowOf(listOf("vehicle"))
+            }.toList(states)
         }
         runCurrent()
-        var previous: String? = null
-        for (uid in listOf(null, "A", "B", null)) {
-            val owner = WorkspaceOwner.fromUid(uid)
-            session.setAuthenticatedUid(uid); runCurrent()
-            assertEquals(LocalDataState.Loading, states.last())
-            previous?.let { sources.getValue(it).emit(listOf("stale")) }; runCurrent()
-            assertEquals(LocalDataState.Loading, states.last())
-            sources.getValue(owner).emit(listOf(owner)); runCurrent()
-            assertEquals(LocalDataState.Ready(owner, listOf(owner)), states.last())
-            previous = owner
-        }
-        assertFalse(states.filterIsInstance<LocalDataState.Ready<List<String>>>().any { it.data.isEmpty() || it.data == listOf("stale") })
+        val ready = states.last()
+        for (uid in listOf(null, "A", "B", null)) { identity.setUid(uid); runCurrent(); assertSame(ready, states.last()) }
+        assertEquals(1, queries)
+        assertEquals(listOf(LocalDataState.Loading, LocalDataState.Ready("local:device", listOf("vehicle"))), states)
     }
 
     @Test fun `owner guard suppresses a cached Ready or Error during UI recomposition`() {
-        val ready = LocalDataState.Ready("firebase:A", listOf("A"))
-        assertSame(ready, ready.forOwner("firebase:A"))
+        val ready = LocalDataState.Ready("local:device", listOf("A"))
+        assertSame(ready, ready.forOwner("local:device"))
         assertEquals(LocalDataState.Loading, ready.forOwner("firebase:B"))
         assertEquals(LocalDataState.Loading, ready.forOwner(WorkspaceOwner.GUEST))
-        assertEquals(LocalDataState.Loading, LocalDataState.Error("firebase:A").forOwner("firebase:B"))
+        assertEquals(LocalDataState.Loading, LocalDataState.Error("local:device").forOwner("firebase:B"))
     }
 
     @Test fun `local failure becomes Error with explicit retry and no automatic retry loop`() = runTest {
-        val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid("A") }
+        val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
         val retry = MutableStateFlow(0)
         val snapshots = MutableSharedFlow<List<String>>()
         val states = mutableListOf<LocalDataState<List<String>>>()
@@ -98,16 +93,16 @@ class GarageHydrationTest {
                 if (attempts == 1) flow { throw IOException("database unavailable") } else snapshots
             }.toList(states)
         }
-        runCurrent(); assertEquals(LocalDataState.Error("firebase:A"), states.last())
+        runCurrent(); assertEquals(LocalDataState.Error("local:device"), states.last())
         advanceTimeBy(10_000); runCurrent(); assertEquals(1, attempts)
         retry.value++; runCurrent(); assertEquals(LocalDataState.Loading, states.last())
         snapshots.emit(listOf("A")); runCurrent()
-        assertEquals(LocalDataState.Ready("firebase:A", listOf("A")), states.last())
+        assertEquals(LocalDataState.Ready("local:device", listOf("A")), states.last())
         assertEquals(2, attempts)
     }
 
     @Test fun `query cancellation is never shown as a local error`() = runTest {
-        val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid(null) }
+        val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
         val states = mutableListOf<LocalDataState<List<String>>>()
         val job = launch {
             observeLocalState(session, MutableStateFlow(0)) { flow<List<String>> { awaitCancellation() } }.toList(states)
@@ -120,7 +115,7 @@ class GarageHydrationTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
-            val session = WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid(null) }
+            val session = WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
             val source = MutableSharedFlow<List<Vehicle>>()
             val repository = mockk<VehicleRepository>()
             every { repository.observeAll() } returns source
@@ -129,14 +124,14 @@ class GarageHydrationTest {
             assertEquals(LocalDataState.Loading, vm.uiState.value)
             val observer = backgroundScope.launch { vm.uiState.collect {} }
             runCurrent(); source.emit(emptyList()); runCurrent()
-            assertEquals(LocalDataState.Ready(WorkspaceOwner.GUEST, emptyList<Vehicle>()), vm.uiState.value)
+            assertEquals(LocalDataState.Ready(com.carmanager.app.core.domain.session.LocalGarageOwner.KEY, emptyList<Vehicle>()), vm.uiState.value)
             observer.cancel(); runCurrent(); advanceTimeBy(5001); runCurrent()
             assertEquals(LocalDataState.Loading, vm.uiState.value)
-            session.setAuthenticatedUid("B")
+            com.carmanager.app.core.domain.session.AuthSession().setUid("B")
             backgroundScope.launch { vm.uiState.collect {} }; runCurrent()
             assertEquals(LocalDataState.Loading, vm.uiState.value)
             source.emit(emptyList()); runCurrent()
-            assertEquals(LocalDataState.Ready("firebase:B", emptyList<Vehicle>()), vm.uiState.value)
+            assertEquals(LocalDataState.Ready("local:device", emptyList<Vehicle>()), vm.uiState.value)
         } finally { store.clear(); runCurrent(); Dispatchers.resetMain() }
     }
 }

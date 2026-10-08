@@ -56,7 +56,7 @@ class PremiumIdentityAndGatesTest {
         assertTrue(viewModel.premiumState.value.isPremium)
         for (uid in listOf("account-A", "account-B", null)) {
             users.value = uid?.let { User(it, "$it@example.test") }
-            session.setAuthenticatedUid(uid)
+            session.completeBootstrap()
             runCurrent()
             assertSame(premium.state, viewModel.premiumState)
             assertTrue(viewModel.isPremium.value)
@@ -70,7 +70,7 @@ class PremiumIdentityAndGatesTest {
         premium.initialize(); runCurrent()
         for (email in listOf("admin@xfuturs.com", "tester@xfuturs.com")) {
             users.value = User("account-A", email)
-            session.setAuthenticatedUid("account-A")
+            session.completeBootstrap()
             runCurrent()
             assertFalse(viewModel.isPremium.value)
             assertFalse(viewModel.premiumState.value.isPremium)

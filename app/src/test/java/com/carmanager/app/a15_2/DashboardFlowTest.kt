@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class DashboardFlowTest {
     private class Fixture(dispatcher: CoroutineDispatcher, time: DashboardTimeSource) {
-        val session=WorkspaceSession(TestDeletionRegistry()).apply { setAuthenticatedUid(null) }
+        val session=WorkspaceSession(TestDeletionRegistry()).apply { completeBootstrap() }
         val vehicles=MutableStateFlow(listOf(vehicle()))
         val fuel=MutableStateFlow(listOf(fill(cost=10.0)))
         val maintenance=MutableStateFlow(listOf(intervention(cost=20.0)))
@@ -105,7 +105,7 @@ class DashboardFlowTest {
             backgroundScope.launch { vm.uiState.collect {} }; vm.refreshTime(); runCurrent()
             val ready=vm.uiState.value as LocalDataState.Ready
             assertEquals(0.0,ready.data.monthlyFuelCost); assertEquals(YearMonth.of(2026,11),ready.data.temporalContext!!.yearMonth)
-            assertEquals("guest:local",ready.owner)
+            assertEquals("local:device",ready.owner)
         } finally { store.clear(); runCurrent(); Dispatchers.resetMain() }
     }
 }

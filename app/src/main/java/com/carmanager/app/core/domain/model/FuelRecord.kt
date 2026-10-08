@@ -9,5 +9,5 @@ data class FuelRecord(
     val totalPrice: Double,
     val note: String? = null,
     val isElectric: Boolean = false, // true = Recharge (kWh), false = Plein (Litres),
-    val ownerKey: String = "guest:local",
+    val ownerKey: String = com.carmanager.app.core.domain.session.LocalGarageOwner.KEY,
 )

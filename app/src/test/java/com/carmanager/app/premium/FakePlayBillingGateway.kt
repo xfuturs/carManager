@@ -24,6 +24,7 @@ class FakePlayBillingGateway : PlayBillingGateway {
     val ackTokens = mutableListOf<String>()
     var queryHandler: (suspend () -> BillingReply<List<PlayPurchase>>)? = null
     var ackHandler: (suspend (String) -> BillingOutcome)? = null
+    var offerHandler: (suspend () -> BillingReply<PremiumOffer>)? = null
 
     override suspend fun connect(): BillingOutcome {
         connectCalls++
@@ -38,7 +39,7 @@ class FakePlayBillingGateway : PlayBillingGateway {
     }
     override suspend fun queryOffer(): BillingReply<PremiumOffer> {
         offerCalls++
-        return offerReply
+        return offerHandler?.invoke() ?: offerReply
     }
     override suspend fun acknowledge(token: String): BillingOutcome {
         ackTokens += token

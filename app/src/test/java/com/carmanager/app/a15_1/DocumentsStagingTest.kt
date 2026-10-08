@@ -33,7 +33,7 @@ class DocumentsStagingTest {
     private val saved=mutableListOf<Document>()
     private val source get()=File(root,"vehicle_documents/source.jpg").apply { parentFile!!.mkdirs(); if (!exists()) writeText("original") }
     private val destination get()=File(root,"vehicle_documents/staged.pdf").apply { parentFile!!.mkdirs() }
-    private val document get()=Document(4,1,"Photo",DocumentCategory.PHOTOS,source.path,0,"firebase:A")
+    private val document get()=Document(4,1,"Photo",DocumentCategory.PHOTOS,source.path,0,"local:device")
     private fun scenario(body: suspend TestScope.(DocumentsViewModel) -> Unit)=runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler)); mockkObject(FileStorageHelper); val store=ViewModelStore()
         try {
@@ -68,7 +68,7 @@ class DocumentsStagingTest {
     }
     @Test fun `import completes outside owned SQL and indexes exact destination inside write`()=scenario { vm ->
         vm.addDocument(uri,"Facture",DocumentCategory.MAINTENANCE); assertTrue((vm.uiEvent.first() as UiEvent.ShowSnackbar).message.contains("succès"))
-        assertEquals(destination.path,saved.single().filePath); assertEquals("firebase:A",saved.single().ownerKey)
+        assertEquals(destination.path,saved.single().filePath); assertEquals("local:device",saved.single().ownerKey)
     }
     @Test fun `conversion completes outside SQL and preserves indexed source`()=scenario { vm ->
         vm.convertToPdf(document); assertEquals("Conversion réussie",(vm.uiEvent.first() as UiEvent.ShowSnackbar).message)
@@ -85,7 +85,7 @@ class DocumentsStagingTest {
     }
     @Test fun `owner change after IO staging prevents insert and cleans staged copy`()=scenario { vm ->
         every { FileStorageHelper.saveFileToInternalStorage(context,uri,any()) } answers {
-            assertFalse(inWrite); destination.writeText("complete"); garage.session.setAuthenticatedUid("B"); destination.path
+            assertFalse(inWrite); destination.writeText("complete"); garage.session.beginBootstrap(); destination.path
         }
         vm.addDocument(uri,"Facture",DocumentCategory.MAINTENANCE); vm.uiEvent.first()
         assertTrue(saved.isEmpty()); assertFalse(destination.exists()); coVerify(exactly=0) { repository.saveDocument(any()) }
